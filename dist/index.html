@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f0ff4f" />
+  <meta name="description" content="Шуточный сканер вайба: загрузи фото и узнай свой стиль." />
+  <title>ВАЙБЧЕК — узнай свой вайб</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Unbounded:wght@600;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <header class="topbar">
+    <a class="logo" href="#" aria-label="Вайбчек — на главную"><span>ВАЙБ</span>ЧЕК<span class="logo-dot"></span></a>
+    <div class="privacy-pill"><span class="privacy-dot"></span> фото остаётся у тебя</div>
+  </header>
+
+  <main>
+    <section class="hero" id="start">
+      <div class="hero-copy">
+        <p class="eyebrow">/// экспериментальный детектор стиля</p>
+        <h1>КАКОЙ У ТЕБЯ<br /><span class="outlined">СЕГОДНЯ ВАЙБ?</span></h1>
+        <p class="subtitle">Один кадр. Пара секунд. Абсолютно несерьёзный, но подозрительно точный вердикт.</p>
+        <div class="hero-actions">
+          <button class="btn btn-primary" id="open-camera">Сканировать себя <span>↗</span></button>
+          <label class="btn btn-ghost" for="file-input">Загрузить фото</label>
+          <input id="file-input" type="file" accept="image/*" hidden />
+        </div>
+        <p class="microcopy">18+ по уровню самоиронии · бесплатно · без регистрации</p>
+      </div>
+
+      <div class="hero-visual" aria-hidden="true">
+        <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+        <div class="scan-card">
+          <div class="scan-head"><span>LIVE SCAN</span><span class="rec">● REC</span></div>
+          <div class="face-placeholder">
+            <div class="face-art"><span class="eye left"></span><span class="eye right"></span><span class="mouth"></span></div>
+            <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+            <div class="scan-line"></div>
+          </div>
+          <div class="metrics"><span>STYLE <b>94</b></span><span>ENERGY <b>87</b></span><span>AURA <b>99</b></span></div>
+        </div>
+        <div class="sticker sticker-one">+100 AURA</div>
+        <div class="sticker sticker-two">СИЛЬНЫЙ<br />ОБРАЗ</div>
+      </div>
+    </section>
+
+    <section class="scale-section">
+      <div class="section-title"><p class="eyebrow">шкала вайба</p><h2>ОТ «КТО ТЫ?» ДО «ГДЕ КУПИЛ?»</h2></div>
+      <div class="scale-track">
+        <article><span class="rank">01</span><div class="emoji">🕸️</div><h3>НЕФОР</h3><p>Дресс-код: против всех</p></article>
+        <article><span class="rank">02</span><div class="emoji">🥀</div><h3>ГОТ</h3><p>Чёрный — тоже цвет</p></article>
+        <article><span class="rank">03</span><div class="emoji">😎</div><h3>ЗДРАВЫЙ</h3><p>Просто хорош</p></article>
+        <article class="hot"><span class="rank">04</span><div class="emoji">🪩</div><h3>СТИЛЯГА</h3><p>Все взгляды сюда</p></article>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal" id="camera-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden>
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-card">
+      <button class="close" data-close aria-label="Закрыть">×</button>
+      <div class="capture-step" id="capture-step">
+        <p class="eyebrow">камера готова</p><h2 id="modal-title">ПОКАЖИ ОБРАЗ</h2>
+        <div class="camera-frame">
+          <video id="video" autoplay muted playsinline></video>
+          <div class="camera-empty" id="camera-empty"><div>◎</div><p>Разреши доступ к камере<br />или загрузи фото</p></div>
+          <div class="viewfinder"><i></i><i></i><i></i><i></i></div>
+        </div>
+        <p class="camera-error" id="camera-error"></p>
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="capture" disabled>Сделать кадр</button>
+          <label class="btn btn-ghost" for="modal-file">Выбрать файл</label>
+          <input id="modal-file" type="file" accept="image/*" hidden />
+        </div>
+      </div>
+
+      <div class="analyzing-step" id="analyzing-step" hidden>
+        <div class="analysis-preview"><img id="analysis-image" alt="Ваше фото" /><div class="analysis-grid"></div><div class="laser"></div></div>
+        <h2>СЧИТЫВАЕМ ВАЙБ...</h2><p id="analysis-status">Оцениваем силу образа</p>
+        <div class="progress"><span id="progress-bar"></span></div>
+      </div>
+
+      <div class="result-step" id="result-step" hidden>
+        <div class="result-photo"><img id="result-image" alt="Ваше фото" /><div class="result-badge" id="result-score">94</div></div>
+        <div class="result-copy"><p class="eyebrow">вердикт готов</p><h2 id="result-title">СТИЛЯГА</h2><p id="result-description"></p>
+          <div class="stat-list"><div><span>СТИЛЬ</span><b id="style-stat">94%</b></div><div><span>ЭНЕРГИЯ</span><b id="energy-stat">87%</b></div><div><span>АУРА</span><b id="aura-stat">99%</b></div></div>
+          <div class="modal-actions"><button class="btn btn-primary" id="again">Ещё раз</button><button class="btn btn-ghost" id="share">Поделиться</button></div>
+          <p class="share-note" id="share-note" aria-live="polite"></p>
+        </div>
+      </div>
+      <canvas id="canvas" hidden></canvas>
+    </div>
+  </div>
+
+  <footer><span>ВАЙБЧЕК © 2026</span><span>НЕ ВОСПРИНИМАЙ ВСЕРЬЁЗ · ТЫ УЖЕ ХОРОШ</span></footer>
+  <script src="app.js"></script>
+</body>
+</html>
