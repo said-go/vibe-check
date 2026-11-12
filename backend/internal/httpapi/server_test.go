@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -147,12 +148,72 @@ func makeImageRequest(t *testing.T, consent []string, images [][]byte, contentTy
 
 func imageFixture(t *testing.T) []byte {
 	t.Helper()
+	return imageFixtureColor(t, color.RGBA{A: 255})
+}
+
+func imageFixtureColor(t *testing.T, fill color.RGBA) []byte {
+	t.Helper()
 	var body bytes.Buffer
 	img := image.NewRGBA(image.Rect(0, 0, 320, 320))
+	for y := 0; y < 320; y++ {
+		for x := 0; x < 320; x++ {
+			img.SetRGBA(x, y, fill)
+		}
+	}
 	if err := jpeg.Encode(&body, img, &jpeg.Options{Quality: 80}); err != nil {
 		t.Fatal(err)
 	}
 	return body.Bytes()
+}
+
+func TestIdempotentRetryDoesNotCallAIOrSpendBudget(t *testing.T) {
+	features, _ := analysis.DecodeFeatures(strings.NewReader(validPayload))
+	calls := 0
+	handler := NewWithLimits(slog.New(slog.NewTextHandler(io.Discard, nil)), 10<<20, fakeVision{features: features, calls: &calls}, Limits{PerHour: 1, PerClientMinute: 1, Concurrent: 1})
+	const key = "test-idempotency-key-123456"
+	makeRequest := func(imageBytes []byte) *http.Request {
+		request := makeImageRequest(t, []string{"true"}, [][]byte{imageBytes}, "image/jpeg")
+		request.Header.Set("Idempotency-Key", key)
+		return request
+	}
+	imageBytes := imageFixture(t)
+	first := httptest.NewRecorder()
+	handler.ServeHTTP(first, makeRequest(imageBytes))
+	if first.Code != http.StatusOK || calls != 1 {
+		t.Fatalf("first analysis status=%d calls=%d", first.Code, calls)
+	}
+	second := httptest.NewRecorder()
+	handler.ServeHTTP(second, makeRequest(imageBytes))
+	if second.Code != http.StatusOK || calls != 1 {
+		t.Fatalf("same-image retry status=%d calls=%d body=%s", second.Code, calls, second.Body.String())
+	}
+	var firstResult, secondResult struct {
+		AnalysisID string `json:"analysis_id"`
+	}
+	if err := json.Unmarshal(first.Body.Bytes(), &firstResult); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(second.Body.Bytes(), &secondResult); err != nil {
+		t.Fatal(err)
+	}
+	if firstResult.AnalysisID == "" || secondResult.AnalysisID != firstResult.AnalysisID {
+		t.Fatalf("retry changed analysis ID: first=%q second=%q", firstResult.AnalysisID, secondResult.AnalysisID)
+	}
+	conflict := httptest.NewRecorder()
+	handler.ServeHTTP(conflict, makeRequest(imageFixtureColor(t, color.RGBA{R: 255, A: 255})))
+	if conflict.Code != http.StatusConflict || calls != 1 || !strings.Contains(conflict.Body.String(), "idempotency_conflict") {
+		t.Fatalf("different-image retry status=%d calls=%d body=%s", conflict.Code, calls, conflict.Body.String())
+	}
+}
+
+func TestInvalidIdempotencyKeyRejectedBeforeAI(t *testing.T) {
+	request := makeImageRequest(t, []string{"true"}, [][]byte{imageFixture(t)}, "image/jpeg")
+	request.Header.Set("Idempotency-Key", "x")
+	response := httptest.NewRecorder()
+	testHandler().ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_idempotency_key") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
 }
 
 func TestAnalyzeRejectsMissingOrDuplicateConsentBeforeProviderCall(t *testing.T) {

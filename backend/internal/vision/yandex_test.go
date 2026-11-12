@@ -25,6 +25,7 @@ func TestYandexAnalyzeRequestAndResult(t *testing.T) {
 		}
 		var body struct {
 			Model    string `json:"model"`
+			Store    *bool  `json:"store"`
 			Messages []struct {
 				Role    string `json:"role"`
 				Content []struct {
@@ -51,6 +52,9 @@ func TestYandexAnalyzeRequestAndResult(t *testing.T) {
 		}
 		if body.Model != "gpt://folder-id/qwen3.6-35b-a3b" {
 			t.Errorf("model = %q", body.Model)
+		}
+		if body.Store == nil || *body.Store {
+			t.Errorf("Yandex request must explicitly disable storage: store=%v", body.Store)
 		}
 		if len(body.Messages) != 1 || body.Messages[0].Role != "user" || len(body.Messages[0].Content) != 2 {
 			t.Errorf("messages = %+v", body.Messages)

@@ -36,6 +36,7 @@ type admission struct {
 	hourStart   time.Time
 	minuteStart time.Time
 	committed   bool
+	reserved    bool
 }
 
 func newRequestLimiter(limits Limits) *requestLimiter {
@@ -53,7 +54,7 @@ func newRequestLimiter(limits Limits) *requestLimiter {
 
 // acquire reserves capacity before reading the body. Invalid requests release
 // their reservation without consuming the billable-call budget.
-func (l *requestLimiter) acquire(r *http.Request) (*admission, int) {
+func (l *requestLimiter) acquire(r *http.Request, knownRetry ...bool) (*admission, int) {
 	select {
 	case l.active <- struct{}{}:
 	default:
@@ -64,18 +65,21 @@ func (l *requestLimiter) acquire(r *http.Request) (*admission, int) {
 	l.mu.Lock()
 	l.rollWindows(now)
 	var retry int
-	switch {
-	case l.hourCount+l.hourPending >= l.limits.PerHour:
-		retry = secondsUntil(l.hourStart.Add(time.Hour), now)
-	case l.clients[key]+l.clientPending[key] >= l.limits.PerClientMinute:
-		retry = secondsUntil(l.minuteStart.Add(time.Minute), now)
-	case l.clients[key]+l.clientPending[key] == 0 && len(l.clients)+len(l.clientPending) >= 10000:
-		retry = secondsUntil(l.minuteStart.Add(time.Minute), now)
-	default:
-		l.hourPending++
-		l.clientPending[key]++
+	reserved := len(knownRetry) == 0 || !knownRetry[0]
+	if reserved {
+		switch {
+		case l.hourCount+l.hourPending >= l.limits.PerHour:
+			retry = secondsUntil(l.hourStart.Add(time.Hour), now)
+		case l.clients[key]+l.clientPending[key] >= l.limits.PerClientMinute:
+			retry = secondsUntil(l.minuteStart.Add(time.Minute), now)
+		case l.clients[key]+l.clientPending[key] == 0 && len(l.clients)+len(l.clientPending) >= 10000:
+			retry = secondsUntil(l.minuteStart.Add(time.Minute), now)
+		default:
+			l.hourPending++
+			l.clientPending[key]++
+		}
 	}
-	reservation := &admission{limiter: l, key: key, hourStart: l.hourStart, minuteStart: l.minuteStart}
+	reservation := &admission{limiter: l, key: key, hourStart: l.hourStart, minuteStart: l.minuteStart, reserved: reserved}
 	l.mu.Unlock()
 	if retry > 0 {
 		<-l.active
@@ -100,10 +104,10 @@ func (a *admission) commit() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.rollWindows(now)
-	if l.hourStart.Equal(a.hourStart) {
+	if a.reserved && l.hourStart.Equal(a.hourStart) {
 		l.hourPending--
 	}
-	if l.minuteStart.Equal(a.minuteStart) {
+	if a.reserved && l.minuteStart.Equal(a.minuteStart) {
 		l.clientPending[a.key]--
 		if l.clientPending[a.key] == 0 {
 			delete(l.clientPending, a.key)
@@ -125,10 +129,10 @@ func (a *admission) release() {
 	l := a.limiter
 	if !a.committed {
 		l.mu.Lock()
-		if l.hourStart.Equal(a.hourStart) {
+		if a.reserved && l.hourStart.Equal(a.hourStart) {
 			l.hourPending--
 		}
-		if l.minuteStart.Equal(a.minuteStart) {
+		if a.reserved && l.minuteStart.Equal(a.minuteStart) {
 			l.clientPending[a.key]--
 			if l.clientPending[a.key] == 0 {
 				delete(l.clientPending, a.key)

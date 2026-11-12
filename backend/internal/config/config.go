@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -96,6 +97,16 @@ func (c Config) Validate() error {
 	}
 	if c.OpenAIBaseURL == "" {
 		return errors.New("OPENAI_BASE_URL is required")
+	}
+	if c.Environment == "production" {
+		baseURL := c.YandexBaseURL
+		if c.AIProvider == "openai" {
+			baseURL = c.OpenAIBaseURL
+		}
+		parsed, err := url.Parse(baseURL)
+		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
+			return errors.New("AI provider URL must use HTTPS in production")
+		}
 	}
 	return nil
 }

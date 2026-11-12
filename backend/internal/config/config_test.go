@@ -62,3 +62,14 @@ func TestLoadPortFallbackAndRateLimits(t *testing.T) {
 		t.Fatal("zero analysis budget must be rejected")
 	}
 }
+
+func TestProductionRejectsPlaintextAIEndpoint(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("AI_PROVIDER", "yandex")
+	t.Setenv("YANDEX_API_KEY", "test-key")
+	t.Setenv("YANDEX_FOLDER_ID", "test-folder")
+	t.Setenv("YANDEX_BASE_URL", "http://ai.example.invalid/v1")
+	if _, err := Load(); err == nil {
+		t.Fatal("production must reject plaintext AI endpoint")
+	}
+}

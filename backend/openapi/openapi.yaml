@@ -34,6 +34,10 @@ paths:
         - in: header
           name: X-Request-ID
           schema: { type: string, minLength: 8, maxLength: 80 }
+        - in: header
+          name: Idempotency-Key
+          description: Optional stable key for retries of the same photo. Kept in process memory for 10 minutes; reuse with a different image returns 409.
+          schema: { type: string, minLength: 16, maxLength: 80, pattern: '^[A-Za-z0-9_-]+$' }
       requestBody:
         required: true
         content:
@@ -55,6 +59,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/AnalysisResponse' }
         '400': { description: Invalid multipart request, duplicate image or duplicate consent field. }
+        '409': { description: Idempotency key was reused with a different image. }
         '413': { description: Request body is too large. }
         '415': { description: Only JPEG and PNG are supported. }
         '422': { description: Invalid image or AI refusal. }

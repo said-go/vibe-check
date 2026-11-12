@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"mime"
@@ -25,6 +26,7 @@ type Server struct {
 	maxRequestBytes int64
 	configured      bool
 	limiter         *requestLimiter
+	idempotency     *idempotencyCache
 }
 
 func New(logger *slog.Logger, maxRequestBytes int64, provider vision.Provider) http.Handler {
@@ -40,7 +42,7 @@ func NewWithLimits(logger *slog.Logger, maxRequestBytes int64, provider vision.P
 	case vision.Unconfigured, *vision.Unconfigured:
 		configured = false
 	}
-	server := &Server{logger: logger, engine: scoring.NewEngine(), vision: provider, images: imageproc.New(), maxRequestBytes: maxRequestBytes, configured: configured, limiter: newRequestLimiter(limits)}
+	server := &Server{logger: logger, engine: scoring.NewEngine(), vision: provider, images: imageproc.New(), maxRequestBytes: maxRequestBytes, configured: configured, limiter: newRequestLimiter(limits), idempotency: newIdempotencyCache()}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", server.health)
 	mux.HandleFunc("GET /readyz", server.ready)
@@ -74,7 +76,13 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, r, http.StatusUnsupportedMediaType, "unsupported_media_type", "Content-Type must be multipart/form-data", false)
 		return
 	}
-	reservation, retryAfter := s.limiter.acquire(r)
+	idempotencyValues := r.Header.Values("Idempotency-Key")
+	if len(idempotencyValues) > 1 || len(idempotencyValues) == 1 && !validIdempotencyKey(idempotencyValues[0]) {
+		s.writeError(w, r, http.StatusBadRequest, "invalid_idempotency_key", "Idempotency-Key must be 16 to 80 letters, digits, hyphens or underscores", false)
+		return
+	}
+	knownRetry := len(idempotencyValues) == 1 && s.idempotency.contains(idempotencyValues[0])
+	reservation, retryAfter := s.limiter.acquire(r, knownRetry)
 	if reservation == nil {
 		w.Header().Set("Retry-After", retryAfterHeader(retryAfter))
 		s.writeError(w, r, http.StatusTooManyRequests, "analysis_rate_limited", "Too many analysis requests", true)
@@ -153,22 +161,78 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, r, http.StatusUnprocessableEntity, "privacy_consent_required", "Consent is required before sending the image to the AI processor", false)
 		return
 	}
+	var idempotencyKey string
+	var idempotencyEntry *idempotencyEntry
+	if len(idempotencyValues) == 1 {
+		idempotencyKey = idempotencyValues[0]
+		var state idempotencyState
+		idempotencyEntry, state = s.idempotency.begin(idempotencyKey, sanitized.JPEG)
+		switch state {
+		case idempotencyConflict:
+			s.writeError(w, r, http.StatusConflict, "idempotency_conflict", "Idempotency-Key was used with a different image", false)
+			return
+		case idempotencyFull:
+			s.writeError(w, r, http.StatusServiceUnavailable, "idempotency_unavailable", "Analysis is temporarily busy", true)
+			return
+		case idempotencyExisting:
+			select {
+			case <-idempotencyEntry.done:
+				s.writeAnalysisOutcome(w, r, idempotencyEntry.outcome)
+			case <-r.Context().Done():
+			}
+			return
+		case idempotencyLeader:
+			defer s.idempotency.finish(idempotencyKey, idempotencyEntry, analysisOutcome{internalError: true})
+		}
+	}
+	complete := func(outcome analysisOutcome) {
+		if idempotencyEntry != nil {
+			s.idempotency.finish(idempotencyKey, idempotencyEntry, outcome)
+		}
+		s.writeAnalysisOutcome(w, r, outcome)
+	}
+	if !s.configured {
+		complete(analysisOutcome{visionErr: vision.ErrUnavailable})
+		return
+	}
 	if retryAfter := reservation.commit(); retryAfter > 0 {
-		w.Header().Set("Retry-After", retryAfterHeader(retryAfter))
-		s.writeError(w, r, http.StatusTooManyRequests, "analysis_rate_limited", "Too many analysis requests", true)
+		complete(analysisOutcome{rateLimited: true, retryAfter: retryAfter})
 		return
 	}
 	features, err := s.vision.Analyze(r.Context(), sanitized.JPEG)
 	if err != nil {
-		s.writeVisionError(w, r, err)
+		complete(analysisOutcome{visionErr: err})
 		return
 	}
 	result, err := s.engine.Evaluate(features)
 	if err != nil {
+		complete(analysisOutcome{scoringFailed: true})
+		return
+	}
+	complete(analysisOutcome{result: result, analysisID: requestIDFrom(r)})
+}
+
+func (s *Server) writeAnalysisOutcome(w http.ResponseWriter, r *http.Request, outcome analysisOutcome) {
+	switch {
+	case outcome.rateLimited:
+		w.Header().Set("Retry-After", retryAfterHeader(outcome.retryAfter))
+		s.writeError(w, r, http.StatusTooManyRequests, "analysis_rate_limited", "Too many analysis requests", true)
+		return
+	case outcome.internalError:
+		s.writeError(w, r, http.StatusInternalServerError, "internal_error", "Unexpected server error", true)
+		return
+	case outcome.visionErr != nil:
+		s.writeVisionError(w, r, outcome.visionErr)
+		return
+	case outcome.scoringFailed:
 		s.writeError(w, r, http.StatusBadGateway, "scoring_failed", "AI result could not be scored", true)
 		return
 	}
-	response := analysisResponse{AnalysisID: requestIDFrom(r), Status: result.Status, Result: result}
+	analysisID := outcome.analysisID
+	if analysisID == "" {
+		analysisID = requestIDFrom(r)
+	}
+	response := analysisResponse{AnalysisID: analysisID, Status: outcome.result.Status, Result: outcome.result}
 	response.Privacy.ServerImageStored = false
 	writeJSON(w, http.StatusOK, response)
 }
@@ -259,7 +323,7 @@ func (s *Server) recoverPanic(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if recovered := recover(); recovered != nil {
-				s.logger.Error("panic", "request_id", requestIDFrom(r), "error", recovered, "stack", string(debug.Stack()))
+				s.logger.Error("panic", "request_id", requestIDFrom(r), "panic_type", fmt.Sprintf("%T", recovered), "stack", string(debug.Stack()))
 				s.writeError(w, r, http.StatusInternalServerError, "internal_error", "Unexpected server error", true)
 			}
 		}()

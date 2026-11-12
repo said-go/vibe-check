@@ -53,6 +53,7 @@ type yandexContent struct {
 
 type yandexRequest struct {
 	Model    string `json:"model"`
+	Store    bool   `json:"store"`
 	Messages []struct {
 		Role    string          `json:"role"`
 		Content []yandexContent `json:"content"`

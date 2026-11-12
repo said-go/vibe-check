@@ -14,3 +14,6 @@
 .camera-error[role="status"]:empty{display:none}
 @media(max-width:520px){.modal{padding:10px}.modal-card{max-height:calc(100dvh - 20px);box-shadow:6px 6px 0 var(--acid)}.modal-actions .btn{min-height:48px}}
 [hidden]{display:none!important}
+.api-status{display:inline-block;margin:12px 0 0;padding:9px 12px;border:1.5px solid var(--ink);font-size:12px;font-weight:700;line-height:1.4;background:var(--paper)}
+.api-status.available{background:var(--acid)}
+.api-status.unavailable{background:#ffe0d5}

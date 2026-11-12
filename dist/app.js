@@ -6,12 +6,14 @@ const ctx = canvas.getContext('2d', { willReadFrequently: true });
 let stream = null;
 let currentImage = '';
 let currentFile = null;
+let analysisKey = '';
 let activeRequest = null;
 let requestGeneration = 0;
 let cameraGeneration = 0;
 let photoGeneration = 0;
 let deferredInstallPrompt = null;
 let focusBeforeModal = null;
+let availabilityGeneration = 0;
 const API_BASE = (window.VIBE_API_BASE_URL || '/api').replace(/\/$/, '');
 const steps = ['capture-step', 'consent-step', 'analyzing-step', 'error-step', 'result-step'];
 
@@ -22,7 +24,7 @@ function showStep(id) {
   heading.focus();
 }
 function cancelRequest() { requestGeneration++; activeRequest?.abort(); activeRequest = null; }
-function clearPhoto() { photoGeneration++; currentFile = null; currentImage = ''; $('#consent-image').removeAttribute('src'); $('#analysis-image').removeAttribute('src'); $('#result-image').removeAttribute('src'); }
+function clearPhoto() { photoGeneration++; currentFile = null; currentImage = ''; analysisKey = ''; $('#consent-image').removeAttribute('src'); $('#analysis-image').removeAttribute('src'); $('#result-image').removeAttribute('src'); }
 
 function openModal(withCamera = true, returnFocus = document.activeElement) {
   focusBeforeModal = returnFocus;
@@ -90,7 +92,7 @@ function capture() {
   }, 'image/jpeg', .85);
 }
 function previewPhoto(file, src) {
-  stopCamera(); cancelRequest(); currentFile = file; currentImage = src;
+  stopCamera(); cancelRequest(); currentFile = file; currentImage = src; analysisKey = crypto.randomUUID();
   $('#consent-image').src = src; $('#privacy-consent').checked = false; $('#start-analysis').disabled = true;
   $('#consent-error').textContent = ''; showStep('consent-step');
 }
@@ -102,6 +104,8 @@ const errorMessages = {
   invalid_image: 'Файл не удалось прочитать как фотографию.',
   image_too_large: 'Фото слишком большое. Выбери файл до 8 МБ.',
   rate_limited: 'Слишком много запросов подряд. Подожди немного и попробуй снова.',
+  idempotency_conflict: 'Это уже другое фото. Выбери его заново и повтори анализ.',
+  invalid_idempotency_key: 'Не удалось подготовить запрос. Выбери фото заново.',
   ai_rejected_image: 'AI не смог обработать этот кадр. Попробуй другое фото.',
   ai_unavailable: 'AI-сервис сейчас недоступен. Повтори попытку позже.',
   invalid_ai_response: 'Ответ AI не удалось проверить. Попробуй ещё раз.'
@@ -112,15 +116,56 @@ function showError(message, retryable = true) {
   $('#retry-analysis').hidden = !retryable || !currentFile;
   showStep('error-step');
 }
+async function analysisReady(signal) {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  signal?.addEventListener('abort', abort, { once: true });
+  const timeout = setTimeout(abort, 5000);
+  try {
+    const response = await fetch(`${API_BASE}/readyz?check=${Date.now()}`, {
+      headers: { Accept: 'application/json' }, cache: 'no-store', signal: controller.signal
+    });
+    if (!response.ok || !response.headers.get('Content-Type')?.toLowerCase().includes('application/json')) return false;
+    return (await response.json()).status === 'ready';
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+    signal?.removeEventListener('abort', abort);
+  }
+}
+async function refreshAvailability() {
+  const generation = ++availabilityGeneration;
+  const status = $('#api-status');
+  status.classList.remove('available', 'unavailable');
+  if (!navigator.onLine) {
+    status.textContent = 'Нет сети — новый AI-анализ недоступен.';
+    status.classList.add('unavailable');
+    return;
+  }
+  status.textContent = 'Проверяем доступность AI-анализа…';
+  const ready = await analysisReady();
+  if (generation !== availabilityGeneration) return;
+  status.textContent = ready ? 'Сервер AI-анализа подключён.' : 'AI-анализ пока не подключён. Интерфейс доступен для просмотра.';
+  status.classList.add(ready ? 'available' : 'unavailable');
+}
 async function analyze() {
   if (!currentFile || !$('#privacy-consent').checked) return;
   if (!navigator.onLine) { showError('Для нового AI-анализа нужен интернет.', true); return; }
   cancelRequest(); const generation = requestGeneration; const controller = new AbortController(); activeRequest = controller;
   showStep('analyzing-step'); $('#analysis-image').src = currentImage;
-  $('#analysis-status').textContent = 'AI анализирует видимые детали образа'; $('#progress-bar').style.width = '65%';
-  const payload = new FormData(); payload.append('image', currentFile); payload.append('privacy_consent', 'true');
+  $('#analysis-status').textContent = 'Проверяем сервер анализа'; $('#progress-bar').style.width = '15%';
   try {
-    const response = await fetch(`${API_BASE}/v1/analyses`, { method: 'POST', body: payload, signal: controller.signal });
+    const ready = await analysisReady(controller.signal);
+    if (generation !== requestGeneration || modal.hidden) return;
+    if (!ready) {
+      showError('AI-анализ пока не подключён. Фото не отправлено — попробуй позже.', true);
+      refreshAvailability();
+      return;
+    }
+    $('#analysis-status').textContent = 'AI анализирует видимые детали образа'; $('#progress-bar').style.width = '65%';
+    const payload = new FormData(); payload.append('image', currentFile); payload.append('privacy_consent', 'true');
+    const response = await fetch(`${API_BASE}/v1/analyses`, { method: 'POST', body: payload, headers: { 'Idempotency-Key': analysisKey }, signal: controller.signal });
     const data = await response.json().catch(() => ({}));
     if (generation !== requestGeneration || modal.hidden) return;
     if (!response.ok) {
@@ -190,7 +235,11 @@ function updateConnectionStatus() {
 }
 window.addEventListener('online', updateConnectionStatus);
 window.addEventListener('offline', updateConnectionStatus);
+window.addEventListener('online', refreshAvailability);
+window.addEventListener('offline', refreshAvailability);
+window.addEventListener('focus', refreshAvailability);
 updateConnectionStatus();
+refreshAvailability();
 
 window.addEventListener('beforeinstallprompt', event => {
   event.preventDefault();
