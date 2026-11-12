@@ -6,7 +6,6 @@
 
 - [#6 — VC-09: интеграция Vision AI](https://github.com/said-go/vibe-check/issues/6) — адаптер Yandex AI Studio готов; нужен живой запрос с ключом и ID каталога.
 - [#9 — VC-12: вертикальный AI-сценарий](https://github.com/said-go/vibe-check/issues/9) — PWA и Go API связаны локально; требуется размещение backend с HTTPS и секретами.
-- [#10 — VC-14: автотесты MVP](https://github.com/said-go/vibe-check/issues/10) — интеграционные тесты и GitHub CI добавлены; ожидается первый зелёный запуск CI.
 
 ## Готово к работе
 
@@ -22,6 +21,7 @@
 
 ## Готово
 
+- [x] [#10 — VC-14: автотесты MVP](https://github.com/said-go/vibe-check/issues/10) — тесты с mock Yandex и GitHub CI прошли, включая race detector и сборку Docker.
 - [x] [#17 — VC-01: концепция MVP](https://github.com/said-go/vibe-check/issues/17)
 - [x] [#18 — VC-02: frontend-прототип](https://github.com/said-go/vibe-check/issues/18)
 - [x] [#19 — VC-03: архитектура системы](https://github.com/said-go/vibe-check/issues/19)
