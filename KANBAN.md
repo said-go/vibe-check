@@ -4,12 +4,10 @@
 
 ## В работе
 
-Следующий этап выбирается из колонки «Готово к работе».
+- [#6 — VC-09: интеграция Vision AI](https://github.com/said-go/vibe-check/issues/6) — код готов, требуется проверка с реальным API-ключом и выбранной моделью.
 
 ## Готово к работе
 
-- [#6 — VC-09: интеграция Vision AI](https://github.com/said-go/vibe-check/issues/6)
-- [#8 — VC-11: безопасная загрузка фото](https://github.com/said-go/vibe-check/issues/8)
 - [#9 — VC-12: вертикальный AI-сценарий](https://github.com/said-go/vibe-check/issues/9)
 - [#10 — VC-14: автотесты MVP](https://github.com/said-go/vibe-check/issues/10)
 
@@ -34,6 +32,7 @@
 - [x] [#3 — VC-06: каркас Backend API](https://github.com/said-go/vibe-check/issues/3)
 - [x] [#5 — VC-08: контракт AI-ответа](https://github.com/said-go/vibe-check/issues/5)
 - [x] [#7 — VC-10: Scoring Engine](https://github.com/said-go/vibe-check/issues/7)
+- [x] [#8 — VC-11: безопасная загрузка фото](https://github.com/said-go/vibe-check/issues/8)
 
 ## Правила доски
 

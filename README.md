@@ -27,7 +27,7 @@ npx serve dist
 
 `taxonomy.js` содержит конфигурируемую таксономию и правила расчёта категорий. Текущий локальный анализ — демонстрационный. Следующий вертикальный этап заменит извлечение признаков на Vision AI через защищённый backend API, сохранив независимый Scoring Engine.
 
-Backend-каркас находится в [`backend/`](backend/): Go API, OpenAPI, строгая JSON Schema визуальных признаков и покрытый тестами Scoring Engine. Загрузка фотографий и вызов Vision AI пока намеренно не подключены.
+Backend находится в [`backend/`](backend/): Go API, безопасная загрузка JPEG/PNG без сохранения, удаление метаданных, OpenAI Responses Vision, строгая JSON Schema и покрытый тестами Scoring Engine. Для живого анализа нужны серверные переменные `OPENAI_API_KEY` и `OPENAI_MODEL`.
 
 ## Дисклеймер
 

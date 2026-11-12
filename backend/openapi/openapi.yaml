@@ -45,6 +45,40 @@ paths:
               schema: { $ref: '#/components/schemas/ScoringResult' }
         '415': { $ref: '#/components/responses/UnsupportedMediaType' }
         '422': { $ref: '#/components/responses/InvalidContract' }
+  /v1/analyses:
+    post:
+      operationId: analyzeImage
+      description: Sanitizes a JPEG or PNG in memory, extracts visual outfit features with Vision AI, then applies deterministic scoring. The image is not persisted.
+      parameters:
+        - in: header
+          name: X-Request-ID
+          schema: { type: string, minLength: 8, maxLength: 80 }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image, privacy_consent]
+              properties:
+                image:
+                  type: string
+                  format: binary
+                privacy_consent:
+                  type: boolean
+                  description: Explicit consent to send the sanitized image to the configured external AI processor.
+      responses:
+        '200':
+          description: Completed or low-confidence analysis. The uploaded image was not stored.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalysisResponse' }
+        '400': { description: Invalid multipart request. }
+        '413': { description: Request body is too large. }
+        '415': { description: Only JPEG and PNG are supported. }
+        '422': { description: Invalid image or AI refusal. }
+        '502': { description: AI returned an invalid contract. }
+        '503': { description: AI provider is temporarily unavailable. }
 components:
   responses:
     UnsupportedMediaType:
@@ -119,6 +153,20 @@ components:
         summary: { type: string }
         recommendations: { type: array, items: { type: string } }
         low_confidence_reason: { type: string }
+    AnalysisResponse:
+      type: object
+      required: [analysis_id, status, result, privacy]
+      properties:
+        analysis_id: { type: string }
+        status: { type: string, enum: [completed, low_confidence] }
+        result: { $ref: '#/components/schemas/ScoringResult' }
+        privacy:
+          type: object
+          additionalProperties: false
+          required: [server_image_stored, external_processor]
+          properties:
+            server_image_stored: { type: boolean, const: false }
+            external_processor: { type: string, const: openai }
     ApiError:
       type: object
       required: [code, message, request_id, retryable]

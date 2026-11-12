@@ -2,28 +2,39 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"runtime/debug"
 	"strings"
 	"time"
 
 	"github.com/said-go/vibe-check/backend/internal/analysis"
+	"github.com/said-go/vibe-check/backend/internal/imageproc"
 	"github.com/said-go/vibe-check/backend/internal/scoring"
+	"github.com/said-go/vibe-check/backend/internal/vision"
 )
 
 type Server struct {
 	logger          *slog.Logger
 	engine          *scoring.Engine
+	vision          vision.Provider
+	images          imageproc.Processor
 	maxRequestBytes int64
 }
 
-func New(logger *slog.Logger, maxRequestBytes int64) http.Handler {
-	server := &Server{logger: logger, engine: scoring.NewEngine(), maxRequestBytes: maxRequestBytes}
+func New(logger *slog.Logger, maxRequestBytes int64, provider vision.Provider) http.Handler {
+	if provider == nil {
+		provider = vision.Unconfigured{}
+	}
+	server := &Server{logger: logger, engine: scoring.NewEngine(), vision: provider, images: imageproc.New(), maxRequestBytes: maxRequestBytes}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", server.health)
 	mux.HandleFunc("GET /readyz", server.ready)
 	mux.HandleFunc("POST /v1/scoring/evaluate", server.evaluate)
+	mux.HandleFunc("POST /v1/analyses", server.analyzeImage)
 	return server.recoverPanic(server.requestID(server.accessLog(mux)))
 }
 
@@ -51,6 +62,114 @@ func (s *Server) evaluate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+type analysisResponse struct {
+	AnalysisID string         `json:"analysis_id"`
+	Status     string         `json:"status"`
+	Result     scoring.Result `json:"result"`
+	Privacy    struct {
+		ServerImageStored bool   `json:"server_image_stored"`
+		ExternalProcessor string `json:"external_processor"`
+	} `json:"privacy"`
+}
+
+func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
+	if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		s.writeError(w, r, http.StatusUnsupportedMediaType, "unsupported_media_type", "Content-Type must be multipart/form-data", false)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, s.maxRequestBytes)
+	reader, err := r.MultipartReader()
+	if err != nil {
+		s.writeError(w, r, http.StatusBadRequest, "invalid_multipart", "Multipart body is invalid", false)
+		return
+	}
+	var sanitized imageproc.SanitizedImage
+	found := false
+	consented := false
+	for {
+		part, partErr := reader.NextPart()
+		if errors.Is(partErr, io.EOF) {
+			break
+		}
+		if errors.Is(partErr, multipart.ErrMessageTooLarge) {
+			s.writeError(w, r, http.StatusRequestEntityTooLarge, "image_too_large", "Image is too large", false)
+			return
+		}
+		if partErr != nil {
+			s.writeError(w, r, http.StatusBadRequest, "invalid_multipart", "Multipart body is invalid", false)
+			return
+		}
+		if part.FormName() == "privacy_consent" {
+			value, _ := io.ReadAll(io.LimitReader(part, 16))
+			consented = strings.EqualFold(strings.TrimSpace(string(value)), "true")
+			_ = part.Close()
+			continue
+		}
+		if part.FormName() != "image" {
+			_ = part.Close()
+			continue
+		}
+		if found {
+			_ = part.Close()
+			s.writeError(w, r, http.StatusBadRequest, "multiple_images", "Only one image is allowed", false)
+			return
+		}
+		found = true
+		sanitized, err = s.images.Sanitize(part, part.Header.Get("Content-Type"))
+		_ = part.Close()
+		if err != nil {
+			s.writeImageError(w, r, err)
+			return
+		}
+	}
+	if !found {
+		s.writeError(w, r, http.StatusBadRequest, "image_required", "Multipart field image is required", false)
+		return
+	}
+	if !consented {
+		s.writeError(w, r, http.StatusUnprocessableEntity, "privacy_consent_required", "Consent is required before sending the image to the AI processor", false)
+		return
+	}
+	features, err := s.vision.Analyze(r.Context(), sanitized.JPEG)
+	if err != nil {
+		s.writeVisionError(w, r, err)
+		return
+	}
+	result, err := s.engine.Evaluate(features)
+	if err != nil {
+		s.writeError(w, r, http.StatusBadGateway, "scoring_failed", "AI result could not be scored", true)
+		return
+	}
+	response := analysisResponse{AnalysisID: requestIDFrom(r), Status: result.Status, Result: result}
+	response.Privacy.ServerImageStored = false
+	response.Privacy.ExternalProcessor = "openai"
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) writeImageError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, imageproc.ErrUnsupportedType):
+		s.writeError(w, r, http.StatusUnsupportedMediaType, "unsupported_image_type", "Only JPEG and PNG images are supported", false)
+	case errors.Is(err, imageproc.ErrImageTooLarge):
+		s.writeError(w, r, http.StatusUnprocessableEntity, "image_dimensions_too_large", "Image dimensions are too large", false)
+	case errors.Is(err, imageproc.ErrImageTooSmall):
+		s.writeError(w, r, http.StatusUnprocessableEntity, "image_dimensions_too_small", "Image must be at least 320×320 pixels", false)
+	default:
+		s.writeError(w, r, http.StatusUnprocessableEntity, "invalid_image", "Image could not be decoded", false)
+	}
+}
+
+func (s *Server) writeVisionError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, vision.ErrUnavailable):
+		s.writeError(w, r, http.StatusServiceUnavailable, "ai_unavailable", "AI analysis is temporarily unavailable", true)
+	case errors.Is(err, vision.ErrRejected):
+		s.writeError(w, r, http.StatusUnprocessableEntity, "ai_rejected_image", "AI could not analyze this image", false)
+	default:
+		s.writeError(w, r, http.StatusBadGateway, "invalid_ai_response", "AI returned an invalid response", true)
+	}
 }
 
 type apiError struct {

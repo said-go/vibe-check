@@ -10,6 +10,7 @@ import (
 
 	"github.com/said-go/vibe-check/backend/internal/config"
 	"github.com/said-go/vibe-check/backend/internal/httpapi"
+	"github.com/said-go/vibe-check/backend/internal/vision"
 )
 
 func main() {
@@ -19,7 +20,11 @@ func main() {
 		logger.Error("invalid_configuration", "error", err)
 		os.Exit(1)
 	}
-	server := &http.Server{Addr: cfg.Address, Handler: httpapi.New(logger, cfg.MaxRequestBytes), ReadTimeout: cfg.ReadTimeout, WriteTimeout: cfg.WriteTimeout}
+	var provider vision.Provider = vision.Unconfigured{}
+	if cfg.OpenAIAPIKey != "" && cfg.OpenAIModel != "" {
+		provider = vision.NewOpenAI(cfg.OpenAIAPIKey, cfg.OpenAIModel, cfg.OpenAIBaseURL, &http.Client{Timeout: cfg.OpenAITimeout})
+	}
+	server := &http.Server{Addr: cfg.Address, Handler: httpapi.New(logger, cfg.MaxRequestBytes, provider), ReadTimeout: cfg.ReadTimeout, WriteTimeout: cfg.WriteTimeout}
 	errors := make(chan error, 1)
 	go func() {
 		logger.Info("server_started", "address", cfg.Address, "environment", cfg.Environment)
