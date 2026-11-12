@@ -4,9 +4,7 @@
 
 ## В работе
 
-- [#1 — VC-04: PWA-установка](https://github.com/said-go/vibe-check/issues/1)
-- [#2 — VC-05: Service Worker и offline-режим](https://github.com/said-go/vibe-check/issues/2)
-- [#4 — VC-07: таксономия категорий](https://github.com/said-go/vibe-check/issues/4)
+Следующий этап выбирается из колонки «Готово к работе».
 
 ## Готово к работе
 
@@ -33,6 +31,9 @@
 - [x] [#18 — VC-02: frontend-прототип](https://github.com/said-go/vibe-check/issues/18)
 - [x] [#19 — VC-03: архитектура системы](https://github.com/said-go/vibe-check/issues/19)
 - [x] [#20 — VC-13: UI экрана результата](https://github.com/said-go/vibe-check/issues/20)
+- [x] [#1 — VC-04: PWA-установка](https://github.com/said-go/vibe-check/issues/1)
+- [x] [#2 — VC-05: Service Worker и offline-режим](https://github.com/said-go/vibe-check/issues/2)
+- [x] [#4 — VC-07: таксономия категорий](https://github.com/said-go/vibe-check/issues/4)
 
 ## Правила доски
 

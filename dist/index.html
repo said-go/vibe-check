@@ -5,7 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#f0ff4f" />
   <meta name="description" content="Шуточный сканер вайба: загрузи фото и узнай свой стиль." />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ВАЙБЧЕК" />
   <title>ВАЙБЧЕК — узнай свой вайб</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Unbounded:wght@600;800&display=swap" rel="stylesheet" />
@@ -15,7 +22,10 @@
   <div class="noise" aria-hidden="true"></div>
   <header class="topbar">
     <a class="logo" href="#" aria-label="Вайбчек — на главную"><span>ВАЙБ</span>ЧЕК<span class="logo-dot"></span></a>
-    <div class="privacy-pill"><span class="privacy-dot"></span> фото остаётся у тебя</div>
+    <div class="topbar-actions">
+      <button class="install-button" id="install-app" type="button" hidden>Установить</button>
+      <div class="privacy-pill" id="connection-status"><span class="privacy-dot"></span><span>фото остаётся у тебя</span></div>
+    </div>
   </header>
 
   <main>
@@ -86,7 +96,7 @@
 
       <div class="result-step" id="result-step" hidden>
         <div class="result-photo"><img id="result-image" alt="Ваше фото" /><div class="result-badge" id="result-score">94</div></div>
-        <div class="result-copy"><p class="eyebrow">вердикт готов</p><h2 id="result-title">СТИЛЯГА</h2><p id="result-description"></p>
+        <div class="result-copy"><p class="eyebrow">вердикт готов</p><h2 id="result-title">СТИЛЯГА</h2><p class="result-category" id="result-category">Стиль: здравый casual</p><p id="result-description"></p>
           <div class="stat-list"><div><span>СТИЛЬ</span><b id="style-stat">94%</b></div><div><span>ЭНЕРГИЯ</span><b id="energy-stat">87%</b></div><div><span>АУРА</span><b id="aura-stat">99%</b></div></div>
           <div class="modal-actions"><button class="btn btn-primary" id="again">Ещё раз</button><button class="btn btn-ghost" id="share">Поделиться</button></div>
           <p class="share-note" id="share-note" aria-live="polite"></p>
@@ -97,6 +107,7 @@
   </div>
 
   <footer><span>ВАЙБЧЕК © 2026</span><span>НЕ ВОСПРИНИМАЙ ВСЕРЬЁЗ · ТЫ УЖЕ ХОРОШ</span></footer>
+  <script src="taxonomy.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
