@@ -27,7 +27,9 @@ func main() {
 	if cfg.AIProvider == "yandex" && cfg.YandexAPIKey != "" && cfg.YandexFolderID != "" {
 		provider = vision.NewYandex(cfg.YandexAPIKey, cfg.YandexFolderID, cfg.YandexModel, cfg.YandexBaseURL, &http.Client{Timeout: cfg.YandexTimeout})
 	}
-	api := httpapi.New(logger, cfg.MaxRequestBytes, provider)
+	api := httpapi.NewWithLimits(logger, cfg.MaxRequestBytes, provider, httpapi.Limits{
+		PerHour: int(cfg.AnalysesPerHour), PerClientMinute: int(cfg.AnalysesPerClientMinute), Concurrent: int(cfg.MaxConcurrentAnalyses),
+	})
 	mux := http.NewServeMux()
 	mux.Handle("/api/", http.StripPrefix("/api", api))
 	mux.Handle("/", http.FileServer(http.Dir(cfg.FrontendDir)))

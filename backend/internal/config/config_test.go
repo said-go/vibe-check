@@ -39,3 +39,26 @@ func TestLoadYandexDefaultsAndProductionCredentials(t *testing.T) {
 		t.Fatal("production must reject missing Yandex folder ID")
 	}
 }
+
+func TestLoadPortFallbackAndRateLimits(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("HTTP_ADDRESS", "")
+	t.Setenv("PORT", "8089")
+	t.Setenv("ANALYSES_PER_HOUR", "40")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Address != ":8089" || cfg.AnalysesPerHour != 40 {
+		t.Fatalf("unexpected config: address=%q perHour=%d", cfg.Address, cfg.AnalysesPerHour)
+	}
+	t.Setenv("HTTP_ADDRESS", "127.0.0.1:8090")
+	cfg, err = Load()
+	if err != nil || cfg.Address != "127.0.0.1:8090" {
+		t.Fatalf("HTTP_ADDRESS did not take precedence: %q %v", cfg.Address, err)
+	}
+	t.Setenv("ANALYSES_PER_HOUR", "0")
+	if _, err := Load(); err == nil {
+		t.Fatal("zero analysis budget must be rejected")
+	}
+}

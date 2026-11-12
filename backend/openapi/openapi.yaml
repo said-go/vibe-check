@@ -20,10 +20,12 @@ paths:
       operationId: ready
       responses:
         '200':
-          description: Process is ready to accept requests.
+          description: AI provider is configured and process is ready to accept requests.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Status' }
+        '503':
+          description: AI provider is not configured.
   /v1/analyses:
     post:
       operationId: analyzeImage
@@ -56,6 +58,7 @@ paths:
         '413': { description: Request body is too large. }
         '415': { description: Only JPEG and PNG are supported. }
         '422': { description: Invalid image or AI refusal. }
+        '429': { description: Per-client, hourly, or concurrency analysis limit reached. Includes Retry-After header. }
         '502': { description: AI returned an invalid contract. }
         '503': { description: AI provider is temporarily unavailable. }
 components:

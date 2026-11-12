@@ -24,7 +24,7 @@
     <a class="logo" href="#" aria-label="Вайбчек — на главную"><span>ВАЙБ</span>ЧЕК<span class="logo-dot"></span></a>
     <div class="topbar-actions">
       <button class="install-button" id="install-app" type="button" hidden>Установить</button>
-      <div class="privacy-pill" id="connection-status"><span class="privacy-dot"></span><span>фото не сохраняется</span></div>
+      <div class="privacy-pill" id="connection-status" role="status" aria-label="Наш сервер не сохраняет фото"><span class="privacy-dot"></span><span>наш сервер не хранит фото</span></div>
     </div>
   </header>
 
@@ -36,7 +36,7 @@
         <p class="subtitle">Сделай кадр — AI рассмотрит детали одежды, а ВАЙБЧЕК покажет направление стиля и уровень образа.</p>
         <div class="hero-actions">
           <button class="btn btn-primary" id="open-camera">Сканировать себя <span>↗</span></button>
-          <label class="btn btn-ghost" for="file-input">Загрузить фото</label>
+          <button class="btn btn-ghost" id="open-file" type="button">Загрузить фото</button>
           <input id="file-input" type="file" accept="image/*" hidden />
         </div>
         <p class="microcopy">Фото отправляется AI-сервису только после твоего согласия · без регистрации</p>
@@ -72,24 +72,24 @@
   <div class="modal" id="camera-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden>
     <div class="modal-backdrop" data-close></div>
     <div class="modal-card">
-      <button class="close" data-close aria-label="Закрыть">×</button>
+      <button class="close" data-close type="button" aria-label="Закрыть окно">×</button>
       <div class="capture-step" id="capture-step">
-        <p class="eyebrow">камера готова</p><h2 id="modal-title">ПОКАЖИ ОБРАЗ</h2>
+        <p class="eyebrow">камера готова</p><h2 id="modal-title" tabindex="-1">ПОКАЖИ ОБРАЗ</h2>
         <div class="camera-frame">
           <video id="video" autoplay muted playsinline></video>
           <div class="camera-empty" id="camera-empty"><div>◎</div><p>Разреши доступ к камере<br />или загрузи фото</p></div>
           <div class="viewfinder"><i></i><i></i><i></i><i></i></div>
         </div>
-        <p class="camera-error" id="camera-error"></p>
+        <p class="camera-error" id="camera-error" role="status"></p>
         <div class="modal-actions">
           <button class="btn btn-primary" id="capture" disabled>Сделать кадр</button>
-          <label class="btn btn-ghost" for="modal-file">Выбрать файл</label>
+          <button class="btn btn-ghost" id="modal-open-file" type="button">Выбрать файл</button>
           <input id="modal-file" type="file" accept="image/*" hidden />
         </div>
       </div>
 
       <div class="consent-step" id="consent-step" hidden>
-        <p class="eyebrow">проверь кадр</p><h2>ГОТОВ К АНАЛИЗУ?</h2>
+        <p class="eyebrow">проверь кадр</p><h2 id="consent-title" tabindex="-1">ГОТОВ К АНАЛИЗУ?</h2>
         <div class="consent-layout">
           <img id="consent-image" alt="Предпросмотр выбранного фото" />
           <div class="consent-copy">
@@ -103,19 +103,19 @@
 
       <div class="analyzing-step" id="analyzing-step" hidden>
         <div class="analysis-preview"><img id="analysis-image" alt="Ваше фото" /><div class="analysis-grid"></div><div class="laser"></div></div>
-        <h2>СЧИТЫВАЕМ ВАЙБ...</h2><p id="analysis-status">Отправляем фото на анализ</p>
+        <h2 id="analyzing-title" tabindex="-1">СЧИТЫВАЕМ ВАЙБ...</h2><p id="analysis-status" role="status">Отправляем фото на анализ</p>
         <div class="progress"><span id="progress-bar"></span></div>
       </div>
 
       <div class="error-step" id="error-step" hidden>
-        <p class="eyebrow">анализ не завершён</p><h2 id="error-title">ПОПРОБУЕМ ЕЩЁ?</h2>
+        <p class="eyebrow">анализ не завершён</p><h2 id="error-title" tabindex="-1">ПОПРОБУЕМ ЕЩЁ?</h2>
         <p id="error-description" role="alert"></p>
         <div class="modal-actions"><button class="btn btn-primary" id="retry-analysis">Повторить</button><button class="btn btn-ghost" id="error-choose-again">Другое фото</button></div>
       </div>
 
       <div class="result-step" id="result-step" hidden>
-        <div class="result-photo"><img id="result-image" alt="Ваше фото" /><div class="result-badge" id="result-score">94</div></div>
-        <div class="result-copy"><p class="eyebrow">вердикт готов</p><h2 id="result-title">СТИЛЯГА</h2><p class="result-category" id="result-category">Стиль: здравый casual</p><p id="result-description"></p>
+        <div class="result-photo"><img id="result-image" alt="Ваше фото" /><div class="result-badge" id="result-score">—</div></div>
+        <div class="result-copy"><p class="eyebrow">вердикт готов</p><h2 id="result-title" tabindex="-1"></h2><p class="result-category" id="result-category"></p><p id="result-description"></p>
           <div class="stat-list"><div><span>ЦЕЛЬНОСТЬ</span><b id="style-stat">—</b></div><div><span>ОРИГИНАЛЬНОСТЬ</span><b id="energy-stat">—</b></div><div><span>ЦВЕТ</span><b id="aura-stat">—</b></div></div>
           <p id="result-recommendations"></p>
           <div class="modal-actions"><button class="btn btn-primary" id="again">Ещё раз</button><button class="btn btn-ghost" id="share">Поделиться</button></div>

@@ -6,6 +6,8 @@ Go API для приёма фото, извлечения признаков о�
 
 Из каталога `backend/` выполните `go run ./cmd/api`, предварительно задав `YANDEX_API_KEY` и `YANDEX_FOLDER_ID` в окружении. Без них development сервер запускается для проверки интерфейса, а анализ возвращает `503 ai_unavailable`. В production отсутствие реквизитов блокирует запуск.
 
+`GET /api/healthz` показывает, что процесс жив. `GET /api/readyz` возвращает 503, пока AI провайдер не настроен. При размещении в Yandex Serverless Containers сервер слушает порт из `PORT`; явный `HTTP_ADDRESS` имеет приоритет.
+
 ```text
 GET  /api/healthz
 GET  /api/readyz
@@ -24,6 +26,9 @@ POST /api/v1/analyses
 | `HTTP_READ_TIMEOUT` | `10s` |
 | `HTTP_WRITE_TIMEOUT` | `60s` |
 | `HTTP_MAX_REQUEST_BYTES` | `10485760` |
+| `ANALYSES_PER_HOUR` | `30` на экземпляр |
+| `ANALYSES_PER_CLIENT_MINUTE` | `3` на сетевой адрес |
+| `MAX_CONCURRENT_ANALYSES` | `2` на экземпляр |
 | `AI_PROVIDER` | `yandex` |
 | `YANDEX_API_KEY` | нет |
 | `YANDEX_FOLDER_ID` | нет |
@@ -32,6 +37,8 @@ POST /api/v1/analyses
 | `YANDEX_TIMEOUT` | `45s` |
 
 Альтернативный провайдер `AI_PROVIDER=openai` использует `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BASE_URL` и `OPENAI_TIMEOUT`. Секреты держите в окружении хостинга, не в Git.
+
+Лимиты возвращают 429 и `Retry-After`. Адрес клиента берётся из сетевого соединения; заголовок `X-Forwarded-For` не считается доверенным. Часовой и параллельный лимиты хранятся в памяти одного экземпляра, поэтому при масштабировании для общего бюджета нужен gateway или общий rate limiter.
 
 Для Yandex API ключу нужен scope `yc.ai.foundationModels.execute`, а сервисному аккаунту роль `ai.languageModels.user` для каталога. Подробнее в [документации Yandex AI Studio](https://aistudio.yandex.ru/en/docs/ai-studio/operations/generation/multimodels-request).
 
@@ -43,3 +50,5 @@ POST /api/v1/analyses
 go test ./...
 go vet ./...
 ```
+
+Инструкция по размещению: [../docs/DEPLOY_YANDEX.md](../docs/DEPLOY_YANDEX.md).

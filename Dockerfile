@@ -11,6 +11,7 @@ WORKDIR /app
 COPY --from=build /vibe-api /app/vibe-api
 COPY dist /app/dist
 USER app
-ENV APP_ENV=production FRONTEND_DIR=/app/dist HTTP_ADDRESS=:8080 AI_PROVIDER=yandex
+ENV APP_ENV=production FRONTEND_DIR=/app/dist AI_PROVIDER=yandex
 EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s CMD wget -q -O /dev/null http://127.0.0.1:${PORT:-8080}/api/healthz || exit 1
 CMD ["/app/vibe-api"]

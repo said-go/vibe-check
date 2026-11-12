@@ -11,22 +11,39 @@ let requestGeneration = 0;
 let cameraGeneration = 0;
 let photoGeneration = 0;
 let deferredInstallPrompt = null;
+let focusBeforeModal = null;
 const API_BASE = (window.VIBE_API_BASE_URL || '/api').replace(/\/$/, '');
 const steps = ['capture-step', 'consent-step', 'analyzing-step', 'error-step', 'result-step'];
 
-function showStep(id) { steps.forEach(step => { $(`#${step}`).hidden = step !== id; }); }
+function showStep(id) {
+  steps.forEach(step => { $(`#${step}`).hidden = step !== id; });
+  const heading = $(`#${id} h2`);
+  modal.setAttribute('aria-labelledby', heading.id);
+  heading.focus();
+}
 function cancelRequest() { requestGeneration++; activeRequest?.abort(); activeRequest = null; }
 function clearPhoto() { photoGeneration++; currentFile = null; currentImage = ''; $('#consent-image').removeAttribute('src'); $('#analysis-image').removeAttribute('src'); $('#result-image').removeAttribute('src'); }
 
-function openModal(withCamera = true) {
+function openModal(withCamera = true, returnFocus = document.activeElement) {
+  focusBeforeModal = returnFocus;
   cancelRequest(); clearPhoto();
   modal.hidden = false;
   document.body.style.overflow = 'hidden';
   resetFlow();
   if (withCamera) startCamera();
 }
-function closeModal() { cancelRequest(); clearPhoto(); modal.hidden = true; document.body.style.overflow = ''; stopCamera(); }
-function stopCamera() { cameraGeneration++; if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; video.srcObject = null; }
+function closeModal() {
+  cancelRequest(); clearPhoto(); modal.hidden = true; document.body.style.overflow = ''; stopCamera();
+  focusBeforeModal?.focus();
+  focusBeforeModal = null;
+}
+function stopCamera() {
+  cameraGeneration++;
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null; video.srcObject = null;
+  $('#capture').disabled = true;
+  $('#camera-empty').hidden = false;
+}
 function resetFlow() { showStep('capture-step'); $('#share-note').textContent = ''; $('#privacy-consent').checked = false; $('#start-analysis').disabled = true; $('#consent-error').textContent = ''; }
 
 async function startCamera() {
@@ -58,10 +75,19 @@ function useFile(file) {
 }
 function capture() {
   if (!video.videoWidth || !video.videoHeight) return;
+  $('#capture').disabled = true;
   const generation = ++photoGeneration;
   canvas.width = video.videoWidth; canvas.height = video.videoHeight;
   ctx.save(); ctx.translate(canvas.width, 0); ctx.scale(-1, 1); ctx.drawImage(video, 0, 0, canvas.width, canvas.height); ctx.restore();
-  canvas.toBlob(blob => { if (blob && generation === photoGeneration && !modal.hidden) previewPhoto(new File([blob], 'camera.jpg', { type: 'image/jpeg' }), canvas.toDataURL('image/jpeg', .85)); }, 'image/jpeg', .85);
+  canvas.toBlob(blob => {
+    if (generation !== photoGeneration || modal.hidden) return;
+    if (!blob) {
+      $('#capture').disabled = false;
+      $('#camera-error').textContent = 'Не удалось сохранить кадр. Попробуй ещё раз.';
+      return;
+    }
+    previewPhoto(new File([blob], 'camera.jpg', { type: 'image/jpeg' }), canvas.toDataURL('image/jpeg', .85));
+  }, 'image/jpeg', .85);
 }
 function previewPhoto(file, src) {
   stopCamera(); cancelRequest(); currentFile = file; currentImage = src;
@@ -74,6 +100,8 @@ const errorMessages = {
   image_dimensions_too_small: 'Фото слишком маленькое. Нужен кадр хотя бы 320×320 пикселей.',
   image_dimensions_too_large: 'Фото слишком большое. Сделай или выбери другой кадр.',
   invalid_image: 'Файл не удалось прочитать как фотографию.',
+  image_too_large: 'Фото слишком большое. Выбери файл до 8 МБ.',
+  rate_limited: 'Слишком много запросов подряд. Подожди немного и попробуй снова.',
   ai_rejected_image: 'AI не смог обработать этот кадр. Попробуй другое фото.',
   ai_unavailable: 'AI-сервис сейчас недоступен. Повтори попытку позже.',
   invalid_ai_response: 'Ответ AI не удалось проверить. Попробуй ещё раз.'
@@ -98,12 +126,13 @@ async function analyze() {
     if (!response.ok) {
       const error = data.error || data;
       const unavailable = [404, 502, 503, 504].includes(response.status);
-      showError(errorMessages[error.code] || (unavailable ? 'Сервер AI-анализа сейчас недоступен. Попробуй позже.' : 'Не удалось завершить анализ. Попробуй ещё раз.'), unavailable || !!error.retryable);
+      const message = response.status === 429 ? 'Слишком много запросов подряд. Подожди немного и попробуй снова.' : errorMessages[error.code] || (unavailable ? 'Сервер AI-анализа сейчас недоступен. Попробуй позже.' : 'Не удалось завершить анализ. Попробуй ещё раз.');
+      showError(message, response.status === 429 || unavailable || !!error.retryable);
       return;
     }
     if (!data.result || !['completed', 'low_confidence'].includes(data.status)) throw new Error('invalid_response');
     $('#progress-bar').style.width = '100%';
-    if (data.status === 'low_confidence') { showError('Не удалось уверенно определить образ. Сделай фото при хорошем освещении, чтобы одежда была видна целиком.', true); return; }
+    if (data.status === 'low_confidence') { showError('Не удалось уверенно определить образ. Сделай другое фото при хорошем освещении, чтобы одежда была видна целиком.', false); return; }
     showResult(data.result);
   } catch (error) {
     if (error.name !== 'AbortError' && generation === requestGeneration && !modal.hidden) {
@@ -125,7 +154,9 @@ function showResult(result) {
 }
 
 $('#open-camera').addEventListener('click', () => openModal(true));
-$('#file-input').addEventListener('change', e => { openModal(false); useFile(e.target.files[0]); e.target.value=''; });
+$('#open-file').addEventListener('click', () => $('#file-input').click());
+$('#modal-open-file').addEventListener('click', () => $('#modal-file').click());
+$('#file-input').addEventListener('change', e => { if (e.target.files[0]) { openModal(false, $('#open-file')); useFile(e.target.files[0]); } e.target.value=''; });
 $('#modal-file').addEventListener('change', e => { useFile(e.target.files[0]); e.target.value=''; });
 $('#capture').addEventListener('click', capture);
 $('#privacy-consent').addEventListener('change', e => { $('#start-analysis').disabled = !e.target.checked; });
@@ -141,9 +172,21 @@ $('#share').addEventListener('click', async () => {
 });
 modal.addEventListener('click', e => { if(e.target.matches('[data-close]')) closeModal(); });
 document.addEventListener('keydown', e => { if(e.key==='Escape' && !modal.hidden) closeModal(); });
+modal.addEventListener('keydown', event => {
+  if (event.key !== 'Tab') return;
+  const focusable = [...modal.querySelectorAll('button:not([disabled]):not([hidden]), input:not([disabled]):not([hidden])')]
+    .filter(element => element.offsetParent !== null);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+});
 
 function updateConnectionStatus() {
-  $('#connection-status').classList.toggle('offline', !navigator.onLine);
+  const indicator = $('#connection-status');
+  indicator.classList.toggle('offline', !navigator.onLine);
+  indicator.setAttribute('aria-label', navigator.onLine ? 'Наш сервер не сохраняет фото' : 'Нет подключения к сети');
 }
 window.addEventListener('online', updateConnectionStatus);
 window.addEventListener('offline', updateConnectionStatus);

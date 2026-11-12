@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.mod
+      - name: Go tests
+        working-directory: backend
+        run: go test -race ./...
+      - name: Go vet
+        working-directory: backend
+        run: go vet ./...
+      - name: PWA JavaScript syntax
+        run: |
+          node --check dist/app.js
+          node --check dist/sw.js
+      - name: Production image build
+        run: docker build --tag vibe-check:ci .

@@ -23,13 +23,24 @@ type Server struct {
 	vision          vision.Provider
 	images          imageproc.Processor
 	maxRequestBytes int64
+	configured      bool
+	limiter         *requestLimiter
 }
 
 func New(logger *slog.Logger, maxRequestBytes int64, provider vision.Provider) http.Handler {
+	return NewWithLimits(logger, maxRequestBytes, provider, DefaultLimits)
+}
+
+func NewWithLimits(logger *slog.Logger, maxRequestBytes int64, provider vision.Provider, limits Limits) http.Handler {
 	if provider == nil {
 		provider = vision.Unconfigured{}
 	}
-	server := &Server{logger: logger, engine: scoring.NewEngine(), vision: provider, images: imageproc.New(), maxRequestBytes: maxRequestBytes}
+	configured := true
+	switch provider.(type) {
+	case vision.Unconfigured, *vision.Unconfigured:
+		configured = false
+	}
+	server := &Server{logger: logger, engine: scoring.NewEngine(), vision: provider, images: imageproc.New(), maxRequestBytes: maxRequestBytes, configured: configured, limiter: newRequestLimiter(limits)}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", server.health)
 	mux.HandleFunc("GET /readyz", server.ready)
@@ -41,6 +52,10 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 func (s *Server) ready(w http.ResponseWriter, _ *http.Request) {
+	if !s.configured {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "ai_unavailable"})
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 }
 
@@ -59,6 +74,13 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, r, http.StatusUnsupportedMediaType, "unsupported_media_type", "Content-Type must be multipart/form-data", false)
 		return
 	}
+	reservation, retryAfter := s.limiter.acquire(r)
+	if reservation == nil {
+		w.Header().Set("Retry-After", retryAfterHeader(retryAfter))
+		s.writeError(w, r, http.StatusTooManyRequests, "analysis_rate_limited", "Too many analysis requests", true)
+		return
+	}
+	defer reservation.release()
 	r.Body = http.MaxBytesReader(w, r.Body, s.maxRequestBytes)
 	reader, err := r.MultipartReader()
 	if err != nil {
@@ -129,6 +151,11 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 	}
 	if !consented {
 		s.writeError(w, r, http.StatusUnprocessableEntity, "privacy_consent_required", "Consent is required before sending the image to the AI processor", false)
+		return
+	}
+	if retryAfter := reservation.commit(); retryAfter > 0 {
+		w.Header().Set("Retry-After", retryAfterHeader(retryAfter))
+		s.writeError(w, r, http.StatusTooManyRequests, "analysis_rate_limited", "Too many analysis requests", true)
 		return
 	}
 	features, err := s.vision.Analyze(r.Context(), sanitized.JPEG)

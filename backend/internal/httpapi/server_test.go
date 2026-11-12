@@ -51,6 +51,19 @@ func TestHealthAndRequestID(t *testing.T) {
 	}
 }
 
+func TestReadinessRequiresConfiguredProvider(t *testing.T) {
+	response := httptest.NewRecorder()
+	testHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unconfigured readiness status %d", response.Code)
+	}
+	response = httptest.NewRecorder()
+	New(slog.New(slog.NewTextHandler(io.Discard, nil)), 10<<20, fakeVision{}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("configured readiness status %d", response.Code)
+	}
+}
+
 func TestInternalScoringRouteIsNotPublic(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/v1/scoring/evaluate", strings.NewReader(validPayload))
 	request.Header.Set("Content-Type", "application/json")
@@ -196,5 +209,23 @@ func TestAnalyzeEnforcesBodyLimitWhileReadingImage(t *testing.T) {
 	New(slog.New(slog.NewTextHandler(io.Discard, nil)), 1024, vision.Unconfigured{}).ServeHTTP(response, request)
 	if response.Code != http.StatusRequestEntityTooLarge || !strings.Contains(response.Body.String(), "image_too_large") {
 		t.Fatalf("status %d, body %s", response.Code, response.Body.String())
+	}
+}
+
+func TestAnalyzeRateLimitRunsBeforeImageDecode(t *testing.T) {
+	features, _ := analysis.DecodeFeatures(strings.NewReader(validPayload))
+	calls := 0
+	handler := NewWithLimits(slog.New(slog.NewTextHandler(io.Discard, nil)), 10<<20, fakeVision{features: features, calls: &calls}, Limits{PerHour: 1, PerClientMinute: 1, Concurrent: 1})
+	first := httptest.NewRecorder()
+	handler.ServeHTTP(first, makeImageRequest(t, []string{"true"}, [][]byte{imageFixture(t)}, "image/jpeg"))
+	if first.Code != http.StatusOK || calls != 1 {
+		t.Fatalf("first analysis: status=%d calls=%d", first.Code, calls)
+	}
+	second := httptest.NewRecorder()
+	request := makeImageRequest(t, []string{"true"}, [][]byte{[]byte("invalid image")}, "image/jpeg")
+	request.Header.Set("X-Forwarded-For", "198.51.100.10")
+	handler.ServeHTTP(second, request)
+	if second.Code != http.StatusTooManyRequests || second.Header().Get("Retry-After") == "" || calls != 1 {
+		t.Fatalf("rate limit must precede image decoding and AI call: status=%d body=%s calls=%d", second.Code, second.Body.String(), calls)
 	}
 }
