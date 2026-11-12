@@ -26,6 +26,8 @@ jobs:
       - name: PWA JavaScript syntax
         run: |
           node --check dist/app.js
+          node --check dist/history.js
+          node --check dist/share-card.js
           node --check dist/sw.js
       - name: Production image build
         run: docker build --tag vibe-check:ci .

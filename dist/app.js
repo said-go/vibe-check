@@ -7,6 +7,9 @@ let stream = null;
 let currentImage = '';
 let currentFile = null;
 let analysisKey = '';
+let currentRecord = null;
+let currentCardBlob = null;
+let historyRows = [];
 let activeRequest = null;
 let requestGeneration = 0;
 let cameraGeneration = 0;
@@ -24,7 +27,7 @@ function showStep(id) {
   heading.focus();
 }
 function cancelRequest() { requestGeneration++; activeRequest?.abort(); activeRequest = null; }
-function clearPhoto() { photoGeneration++; currentFile = null; currentImage = ''; analysisKey = ''; $('#consent-image').removeAttribute('src'); $('#analysis-image').removeAttribute('src'); $('#result-image').removeAttribute('src'); }
+function clearPhoto() { photoGeneration++; currentFile = null; currentImage = ''; analysisKey = ''; currentRecord = null; currentCardBlob = null; $('#consent-image').removeAttribute('src'); $('#analysis-image').removeAttribute('src'); $('#result-image').removeAttribute('src'); }
 
 function openModal(withCamera = true, returnFocus = document.activeElement) {
   focusBeforeModal = returnFocus;
@@ -178,14 +181,22 @@ async function analyze() {
     if (!data.result || !['completed', 'low_confidence'].includes(data.status)) throw new Error('invalid_response');
     $('#progress-bar').style.width = '100%';
     if (data.status === 'low_confidence') { showError('Не удалось уверенно определить образ. Сделай другое фото при хорошем освещении, чтобы одежда была видна целиком.', false); return; }
-    showResult(data.result);
+    showResult(data.result, data.analysis_id);
   } catch (error) {
     if (error.name !== 'AbortError' && generation === requestGeneration && !modal.hidden) {
       showError(error.message === 'invalid_response' ? 'Сервер AI-анализа пока не настроен или вернул неверный ответ.' : 'Нет связи с сервером анализа. Проверь интернет и попробуй ещё раз.', true);
     }
   } finally { if (generation === requestGeneration) activeRequest = null; }
 }
-function showResult(result) {
+function showResult(result, analysisId) {
+  currentRecord = window.VIBE_HISTORY.prepare(analysisId, result);
+  currentCardBlob = null;
+  const record = currentRecord;
+  window.VIBE_SHARE_CARD.create(record).then(blob => {
+    if (currentRecord === record) currentCardBlob = blob;
+  }).catch(() => {});
+  $('#save-result').disabled = false;
+  $('#save-result').textContent = 'Сохранить в историю';
   $('#result-image').src = currentImage;
   $('#result-score').textContent = result.score;
   $('#result-title').textContent = result.level_title;
@@ -197,6 +208,117 @@ function showResult(result) {
   $('#result-recommendations').textContent = Array.isArray(result.recommendations) ? result.recommendations.join(' · ') : '';
   showStep('result-step');
 }
+
+function resultText(record) {
+  return `Мой результат в ВАЙБЧЕК: ${record.levelTitle}, стиль ${record.category} — ${record.score}/100. А ты кто сегодня?`;
+}
+
+function historyCard(record) {
+  const card = document.createElement('article');
+  card.className = 'history-card';
+  const top = document.createElement('div');
+  top.className = 'history-card-top';
+  const date = document.createElement('time');
+  date.dateTime = new Date(record.createdAt).toISOString();
+  date.textContent = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium' }).format(record.createdAt);
+  const score = document.createElement('strong');
+  score.textContent = `${record.score}/100`;
+  top.append(date, score);
+  const title = document.createElement('h3');
+  title.textContent = record.levelTitle;
+  const category = document.createElement('p');
+  category.textContent = `Стиль: ${record.category}`;
+  const actions = document.createElement('div');
+  actions.className = 'history-actions';
+  for (const [label, action] of [['Скачать карточку', 'download'], ['Удалить', 'delete']]) {
+    const button = document.createElement('button');
+    button.type = 'button'; button.textContent = label;
+    button.dataset.action = action; button.dataset.id = record.id;
+    actions.append(button);
+  }
+  card.append(top, title, category, actions);
+  return card;
+}
+
+async function renderHistory() {
+  const list = $('#history-list');
+  const message = $('#history-message');
+  try {
+    historyRows = await window.VIBE_HISTORY.list();
+    list.replaceChildren(...historyRows.map(historyCard));
+    $('#clear-history').hidden = historyRows.length === 0;
+    message.textContent = historyRows.length ? `Сохранено результатов: ${historyRows.length}. Фото не сохраняются.` : 'История пока пуста.';
+    return true;
+  } catch {
+    historyRows = [];
+    list.replaceChildren();
+    $('#clear-history').hidden = true;
+    message.textContent = 'Локальная история недоступна в этом браузере.';
+    return false;
+  }
+}
+
+$('#save-result').addEventListener('click', async () => {
+  if (!currentRecord) return;
+  const button = $('#save-result');
+  button.disabled = true;
+  try {
+    await window.VIBE_HISTORY.save(currentRecord.id, {
+      score: currentRecord.score, level_title: currentRecord.levelTitle,
+      primary_category: { title: currentRecord.category }, summary: currentRecord.summary,
+      metrics: { coherence: currentRecord.metrics.coherence, originality: currentRecord.metrics.originality, color_harmony: currentRecord.metrics.colorHarmony },
+      recommendations: currentRecord.recommendations
+    });
+    await renderHistory();
+    button.textContent = 'Сохранено';
+    $('#share-note').textContent = 'Результат сохранён на этом устройстве без фото.';
+  } catch {
+    button.disabled = false;
+    $('#share-note').textContent = 'Не удалось сохранить результат на этом устройстве.';
+  }
+});
+
+$('#download-card').addEventListener('click', async () => {
+  if (!currentRecord) return;
+  const button = $('#download-card');
+  button.disabled = true;
+  try {
+    window.VIBE_SHARE_CARD.download(currentCardBlob || await window.VIBE_SHARE_CARD.create(currentRecord));
+    $('#share-note').textContent = 'Карточка PNG скачана без фотографии.';
+  } catch {
+    $('#share-note').textContent = 'Не удалось собрать карточку. Попробуй ещё раз.';
+  } finally { button.disabled = false; }
+});
+
+$('#history-list').addEventListener('click', async event => {
+  const button = event.target.closest('button[data-action]');
+  if (!button) return;
+  const record = historyRows.find(item => item.id === button.dataset.id);
+  if (!record) return;
+  button.disabled = true;
+  try {
+    if (button.dataset.action === 'delete') {
+      await window.VIBE_HISTORY.remove(record.id);
+      await renderHistory();
+    } else {
+      window.VIBE_SHARE_CARD.download(await window.VIBE_SHARE_CARD.create(record));
+      button.disabled = false;
+    }
+  } catch {
+    button.disabled = false;
+    $('#history-message').textContent = 'Не удалось выполнить действие с историей.';
+  }
+});
+
+$('#clear-history').addEventListener('click', async () => {
+  if (!window.confirm('Удалить все сохранённые результаты с этого устройства?')) return;
+  try {
+    await window.VIBE_HISTORY.clear();
+    await renderHistory();
+  } catch { $('#history-message').textContent = 'Не удалось очистить историю.'; }
+});
+
+renderHistory();
 
 $('#open-camera').addEventListener('click', () => openModal(true));
 $('#open-file').addEventListener('click', () => $('#file-input').click());
@@ -212,8 +334,23 @@ $('#choose-again').addEventListener('click', chooseAgain);
 $('#error-choose-again').addEventListener('click', chooseAgain);
 $('#again').addEventListener('click', chooseAgain);
 $('#share').addEventListener('click', async () => {
-  const text=`Мой результат в ВАЙБЧЕК: ${$('#result-title').textContent}, ${$('#result-category').textContent} — ${$('#result-score').textContent}/100. А ты кто сегодня?`;
-  try { if (navigator.share) await navigator.share({title:'Мой вайбчек',text}); else { await navigator.clipboard.writeText(text); $('#share-note').textContent='Результат скопирован — отправляй друзьям!'; } } catch(e) { if(e.name!=='AbortError') $('#share-note').textContent='Не получилось поделиться. Попробуй ещё раз.'; }
+  if (!currentRecord) return;
+  const button = $('#share');
+  button.disabled = true;
+  try {
+    const text = resultText(currentRecord);
+    const file = currentCardBlob && new File([currentCardBlob], 'vibe-check.png', { type: 'image/png' });
+    if (file && navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ title: 'Мой вайбчек', text, files: [file] });
+    } else if (navigator.share) {
+      await navigator.share({ title: 'Мой вайбчек', text });
+    } else {
+      await navigator.clipboard.writeText(text);
+      $('#share-note').textContent = 'Текст результата скопирован. Карточку можно скачать отдельно.';
+    }
+  } catch (error) {
+    if (error.name !== 'AbortError') $('#share-note').textContent = 'Не получилось поделиться. Скачай карточку отдельно.';
+  } finally { button.disabled = false; }
 });
 modal.addEventListener('click', e => { if(e.target.matches('[data-close]')) closeModal(); });
 document.addEventListener('keydown', e => { if(e.key==='Escape' && !modal.hidden) closeModal(); });

@@ -32,6 +32,8 @@ try {
 }
 
 Run-Checked 'node' @('--check', (Join-Path $projectRoot 'dist/app.js'))
+Run-Checked 'node' @('--check', (Join-Path $projectRoot 'dist/history.js'))
+Run-Checked 'node' @('--check', (Join-Path $projectRoot 'dist/share-card.js'))
 Run-Checked 'node' @('--check', (Join-Path $projectRoot 'dist/sw.js'))
 
 if ($BuildImage) {

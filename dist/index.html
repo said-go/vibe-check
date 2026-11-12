@@ -68,6 +68,16 @@
         <article class="hot"><span class="rank">04</span><div class="emoji">🪩</div><h3>СПОРТ-ШИК</h3><p>Комфорт с акцентом</p></article>
       </div>
     </section>
+
+    <section class="history-section" id="history" aria-labelledby="history-title">
+      <div class="history-heading">
+        <div><p class="eyebrow">только на этом устройстве</p><h2 id="history-title">ИСТОРИЯ ВАЙБА</h2></div>
+        <button class="btn btn-ghost" id="clear-history" type="button" hidden>Очистить историю</button>
+      </div>
+      <p class="history-description">Сохраняй понравившиеся результаты. Фото в историю не попадает; записи можно удалить в любой момент.</p>
+      <p class="history-message" id="history-message" role="status" aria-live="polite">История пока пуста.</p>
+      <div class="history-list" id="history-list"></div>
+    </section>
   </main>
 
   <div class="modal" id="camera-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden>
@@ -119,7 +129,7 @@
         <div class="result-copy"><p class="eyebrow">вердикт готов</p><h2 id="result-title" tabindex="-1"></h2><p class="result-category" id="result-category"></p><p id="result-description"></p>
           <div class="stat-list"><div><span>ЦЕЛЬНОСТЬ</span><b id="style-stat">—</b></div><div><span>ОРИГИНАЛЬНОСТЬ</span><b id="energy-stat">—</b></div><div><span>ЦВЕТ</span><b id="aura-stat">—</b></div></div>
           <p id="result-recommendations"></p>
-          <div class="modal-actions"><button class="btn btn-primary" id="again">Ещё раз</button><button class="btn btn-ghost" id="share">Поделиться</button></div>
+          <div class="modal-actions"><button class="btn btn-primary" id="again">Ещё раз</button><button class="btn btn-ghost" id="save-result">Сохранить в историю</button><button class="btn btn-ghost" id="download-card">Скачать карточку</button><button class="btn btn-ghost" id="share">Поделиться</button></div>
           <p class="share-note" id="share-note" aria-live="polite"></p>
         </div>
       </div>
@@ -128,6 +138,8 @@
   </div>
 
   <footer><span>ВАЙБЧЕК © 2026</span><span>НЕ ВОСПРИНИМАЙ ВСЕРЬЁЗ · ТЫ УЖЕ ХОРОШ</span></footer>
+  <script src="history.js"></script>
+  <script src="share-card.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

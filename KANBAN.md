@@ -12,8 +12,6 @@
 
 ## Бэклог
 
-- [#11 — VC-15: локальная история](https://github.com/said-go/vibe-check/issues/11)
-- [#12 — VC-16: карточка для публикации](https://github.com/said-go/vibe-check/issues/12)
 - [#13 — VC-17: региональное тестирование](https://github.com/said-go/vibe-check/issues/13)
 - [#14 — VC-18: контексты оценки](https://github.com/said-go/vibe-check/issues/14)
 - [#15 — VC-19: аккаунт и синхронизация](https://github.com/said-go/vibe-check/issues/15)
@@ -21,6 +19,8 @@
 
 ## Готово
 
+- [x] [#11 — VC-15: локальная история](https://github.com/said-go/vibe-check/issues/11) — результаты хранятся только на устройстве, без фото; доступны удаление и полная очистка.
+- [x] [#12 — VC-16: карточка для публикации](https://github.com/said-go/vibe-check/issues/12) — PNG без фото скачивается, Share API отправляет изображение при поддержке браузером.
 - [x] [#10 — VC-14: автотесты MVP](https://github.com/said-go/vibe-check/issues/10) — тесты с mock Yandex и GitHub CI прошли, включая race detector и сборку Docker.
 - [x] [#17 — VC-01: концепция MVP](https://github.com/said-go/vibe-check/issues/17)
 - [x] [#18 — VC-02: frontend-прототип](https://github.com/said-go/vibe-check/issues/18)
