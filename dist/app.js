@@ -45,7 +45,7 @@ function closeModal() {
 function stopCamera() {
   cameraGeneration++;
   if (stream) stream.getTracks().forEach(t => t.stop());
-  stream = null; video.srcObject = null;
+  stream = null; video.onloadedmetadata = null; video.srcObject = null;
   $('#capture').disabled = true;
   $('#camera-empty').hidden = false;
 }
@@ -59,7 +59,11 @@ async function startCamera() {
     const cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 } }, audio: false });
     if (generation !== cameraGeneration || modal.hidden) { cameraStream.getTracks().forEach(t => t.stop()); return; }
     stream = cameraStream;
-    video.srcObject = stream; $('#camera-empty').hidden = true; $('#capture').disabled = false;
+    video.onloadedmetadata = () => {
+      if (generation === cameraGeneration && !modal.hidden && video.videoWidth && video.videoHeight) $('#capture').disabled = false;
+    };
+    video.srcObject = stream; $('#camera-empty').hidden = true;
+    if (video.videoWidth && video.videoHeight) $('#capture').disabled = false;
   } catch (e) {
     if (generation !== cameraGeneration || modal.hidden) return;
     $('#camera-empty').hidden = false; $('#capture').disabled = true;
@@ -69,10 +73,11 @@ async function startCamera() {
 
 function useFile(file) {
   if (!file) return;
+  cancelRequest(); clearPhoto(); stopCamera();
   if (!['image/jpeg', 'image/png'].includes(file.type) || file.size > 8 * 1024 * 1024) {
     showError('Нужен JPEG или PNG размером до 8 МБ.', false); return;
   }
-  const generation = ++photoGeneration;
+  const generation = photoGeneration;
   const reader = new FileReader();
   reader.onload = () => { if (generation === photoGeneration && !modal.hidden) previewPhoto(file, reader.result); };
   reader.onerror = () => { if (generation === photoGeneration && !modal.hidden) showError('Не удалось прочитать фото. Выбери другой файл.', false); };
@@ -82,7 +87,8 @@ function capture() {
   if (!video.videoWidth || !video.videoHeight) return;
   $('#capture').disabled = true;
   const generation = ++photoGeneration;
-  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  const scale = Math.min(1, 1600 / Math.max(video.videoWidth, video.videoHeight));
+  canvas.width = Math.round(video.videoWidth * scale); canvas.height = Math.round(video.videoHeight * scale);
   ctx.save(); ctx.translate(canvas.width, 0); ctx.scale(-1, 1); ctx.drawImage(video, 0, 0, canvas.width, canvas.height); ctx.restore();
   canvas.toBlob(blob => {
     if (generation !== photoGeneration || modal.hidden) return;

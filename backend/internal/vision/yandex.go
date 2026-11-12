@@ -120,7 +120,7 @@ func (p *Yandex) Analyze(ctx context.Context, sanitizedJPEG []byte) (analysis.Vi
 	if err != nil {
 		return analysis.VisualFeatures{}, fmt.Errorf("%w: read Yandex response: %v", ErrUnavailable, err)
 	}
-	if response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= 500 {
+	if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden || response.StatusCode == http.StatusNotFound || response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= 500 {
 		return analysis.VisualFeatures{}, fmt.Errorf("%w: status %d", ErrUnavailable, response.StatusCode)
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {

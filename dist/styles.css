@@ -33,3 +33,4 @@
 .history-actions button:hover{background:var(--acid)}
 .history-actions button:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
 @media(max-width:650px){.history-heading{align-items:start;flex-direction:column}.history-section{padding-top:55px}}
+@media(max-width:520px){.hero h1{font-size:clamp(27px,9vw,38px)}.stat-list{grid-template-columns:1fr}.stat-list div{flex-direction:row;align-items:center;justify-content:space-between;gap:12px;border-right:0;border-bottom:1px solid}.stat-list div:last-child{border-bottom:0}.stat-list span{text-align:left}}

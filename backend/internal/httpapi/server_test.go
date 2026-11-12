@@ -242,6 +242,14 @@ func TestAnalyzeRejectsMissingOrDuplicateConsentBeforeProviderCall(t *testing.T)
 	}
 }
 
+func TestAnalyzeChecksConsentBeforeDecodingImage(t *testing.T) {
+	response := httptest.NewRecorder()
+	testHandler().ServeHTTP(response, makeImageRequest(t, nil, [][]byte{[]byte("not an image")}, "image/jpeg"))
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), `"code":"privacy_consent_required"`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
 func TestAnalyzeRejectsDuplicateAndMismatchedImages(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -260,6 +268,30 @@ func TestAnalyzeRejectsDuplicateAndMismatchedImages(t *testing.T) {
 				t.Fatalf("status %d, body %s", response.Code, response.Body.String())
 			}
 		})
+	}
+}
+
+func TestAnalyzeRejectsUnexpectedMultipartField(t *testing.T) {
+	features, _ := analysis.DecodeFeatures(strings.NewReader(validPayload))
+	calls := 0
+	handler := New(slog.New(slog.NewTextHandler(io.Discard, nil)), 10<<20, fakeVision{features: features, calls: &calls})
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("privacy_consent", "true"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteField("extra", "unexpected"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/v1/analyses", &body)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), `"code":"unexpected_field"`) || calls != 0 {
+		t.Fatalf("status=%d body=%s provider calls=%d", response.Code, response.Body.String(), calls)
 	}
 }
 

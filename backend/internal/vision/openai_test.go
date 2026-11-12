@@ -65,3 +65,16 @@ func TestOpenAIAnalyzeHandlesRefusalAndTemporaryFailure(t *testing.T) {
 		t.Fatalf("expected unavailable, got %v", err)
 	}
 }
+
+func TestOpenAIAnalyzeTreatsConfigurationFailuresAsUnavailable(t *testing.T) {
+	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) }))
+			defer server.Close()
+			provider := NewOpenAI("key", "model", server.URL, server.Client())
+			if _, err := provider.Analyze(context.Background(), []byte("jpeg")); !errors.Is(err, ErrUnavailable) {
+				t.Fatalf("status %d returned %v, want unavailable", status, err)
+			}
+		})
+	}
+}

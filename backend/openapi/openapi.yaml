@@ -29,7 +29,7 @@ paths:
   /v1/analyses:
     post:
       operationId: analyzeImage
-      description: Sanitizes one JPEG or PNG in memory, sends it to the configured AI provider after explicit consent, then scores visual outfit features. The image is not persisted by this server. Duplicate image or consent fields are rejected.
+      description: Sanitizes one JPEG or PNG in memory after explicit consent, sends it to the configured AI provider, then scores visual outfit features. The image is not persisted by this server. Duplicate or unexpected fields are rejected.
       parameters:
         - in: header
           name: X-Request-ID
@@ -44,6 +44,7 @@ paths:
           multipart/form-data:
             schema:
               type: object
+              additionalProperties: false
               required: [image, privacy_consent]
               properties:
                 image:
@@ -58,7 +59,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AnalysisResponse' }
-        '400': { description: Invalid multipart request, duplicate image or duplicate consent field. }
+        '400': { description: Invalid multipart request, duplicate or unexpected field. }
         '409': { description: Idempotency key was reused with a different image. }
         '413': { description: Request body is too large. }
         '415': { description: Only JPEG and PNG are supported. }

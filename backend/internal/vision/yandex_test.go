@@ -90,7 +90,9 @@ func TestYandexAnalyzeRejectsBadResponses(t *testing.T) {
 	}{
 		{"rate limit", 429, `{}`, ErrUnavailable},
 		{"server error", 503, `{}`, ErrUnavailable},
-		{"bad key", 401, `{}`, ErrRejected},
+		{"bad key", 401, `{}`, ErrUnavailable},
+		{"missing permission", 403, `{}`, ErrUnavailable},
+		{"missing model", 404, `{}`, ErrUnavailable},
 		{"refusal", 200, `{"choices":[{"finish_reason":"stop","message":{"role":"assistant","refusal":"cannot comply"}}]}`, ErrRejected},
 		{"filtered", 200, `{"choices":[{"finish_reason":"content_filter","message":{"role":"assistant"}}]}`, ErrRejected},
 		{"truncated", 200, `{"choices":[{"finish_reason":"length","message":{"role":"assistant","content":"{}"}}]}`, ErrInvalidResponse},

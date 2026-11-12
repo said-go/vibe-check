@@ -8,9 +8,19 @@
 
 Из корня проекта на Windows запустите `pwsh -NoProfile -File scripts/preflight.ps1`. Скрипт выполняет Go тесты, `go vet`, проверку синтаксиса PWA и сообщает, доступны ли Docker daemon и `yc`. Он не читает секреты и не создаёт облачные ресурсы. После запуска Docker можно добавить `-BuildImage`, чтобы проверить локальную сборку; `-RequireCloudTools` требует готового Docker daemon и установленного `yc`.
 
+Сценарий `scripts/deploy-yandex.ps1` принимает только ID ресурсов, проверяет их формат и по умолчанию показывает план без облачных операций. Запуск с `-Apply` требует чистое Git-дерево, работающий Docker, настроенную авторизацию Docker в Container Registry и `yc` с правами на контейнер. Он собирает образ с полным SHA коммита, отправляет его в Registry и создаёт новую ревизию существующего контейнера. Он не создаёт ресурсы, не открывает публичный доступ и не читает значение ключа из Lockbox.
+
+```powershell
+pwsh -NoProfile -File scripts/deploy-yandex.ps1 `
+  -FolderId <folder-id> -RegistryId <registry-id> -ContainerId <container-id> `
+  -ServiceAccountId <service-account-id> -SecretId <lockbox-secret-id> `
+  -SecretVersionId <lockbox-version-id>
+# Повторите с -Apply после проверки плана и доступа.
+```
+
 ## 1. Подготовить доступ
 
-Создайте сервисный аккаунт для контейнера. Дайте ему `container-registry.images.puller` на registry, `ai.languageModels.user` на каталог и `lockbox.payloadViewer` на конкретный секрет. Если секрет защищён пользовательским KMS ключом, потребуется и `kms.keys.encrypterDecrypter` на ключ. Для создания ревизии вызывающему пользователю нужна роль `iam.serviceAccounts.user` на сервисном аккаунте. Создайте API-ключ с областью `yc.ai.foundationModels.execute`, сохраните его в Yandex Lockbox под ключом `YANDEX_API_KEY`. Ключ не добавляйте в GitHub, Dockerfile или командную строку.
+Создайте сервисный аккаунт для контейнера. Дайте ему `container-registry.images.puller` на registry, `ai.languageModels.user` на каталог и `lockbox.payloadViewer` на конкретный секрет. Если секрет защищён пользовательским KMS ключом, потребуется и `kms.keys.encrypterDecrypter` на ключ. Для создания ревизии вызывающему пользователю нужна роль `iam.serviceAccounts.user` на сервисном аккаунте; для отправки образа в Registry — `container-registry.images.pusher` на registry или repository. Создайте API-ключ с областью `yc.ai.foundationModels.execute`, сохраните его в Yandex Lockbox под ключом `YANDEX_API_KEY`. Ключ не добавляйте в GitHub, Dockerfile или командную строку.
 
 ## 2. Собрать образ
 
@@ -41,11 +51,15 @@ MAX_CONCURRENT_ANALYSES=2
 
 При работе через CLI команда создания контейнера — `yc serverless container create --name vibe-check`. Для ревизии используйте `yc serverless container revision deploy` с `--container-name`, `--image`, `--service-account-id`, `--execution-timeout 60s`, `--environment` для перечисленных выше открытых значений и `--secret environment-variable=YANDEX_API_KEY,id=<secret-id>,version-id=<version-id>,key=YANDEX_API_KEY`. Секретные значения в `--environment` не передавайте. Точные параметры CLI сверяйте с [документацией ревизий](https://yandex.cloud/en/docs/serverless-containers/operations/manage-revision) и [Lockbox](https://yandex.cloud/en/docs/lockbox/operations/serverless/containers).
 
+Скрипт задаёт максимум один экземпляр **на зону**, поэтому суммарный расход может расти при запуске в нескольких зонах. Его лимиты в памяти также действуют отдельно на каждом экземпляре. Перед публичным доступом настройте бюджет и проверьте доступные ограничения в облаке.
+
 Встроенные лимиты работают в памяти одного экземпляра. Если платформа запускает несколько экземпляров, общий расход может превышать `ANALYSES_PER_HOUR`; ограничьте масштабирование или настройте внешний gateway с общим лимитом перед открытым релизом.
 
 ## 4. Проверить релиз
 
 Откройте `https://<container-id>.containers.yandexcloud.net/`. Затем проверьте `/api/healthz` и `/api/readyz`. Отправьте тестовое фото через PWA: без согласия запрос не должен уходить, после согласия должен появиться результат либо понятная ошибка низкой уверенности. Проверьте журналы на отсутствие изображения, API-ключа и тела запроса. Для проверки лимита отправьте серию запросов и убедитесь, что сервер возвращает 429 до обращения к AI.
+
+Для проверок без отправки фото запустите `pwsh -NoProfile -File scripts/smoke-yandex.ps1 -BaseUrl https://<container-id>.containers.yandexcloud.net/`. Он требует ответы 200 от `healthz`, `readyz`, главной страницы и PWA-манифеста. До открытия публичного доступа используйте авторизованный способ вызова из документации Yandex Cloud; этот скрипт проверяет обычный публичный HTTPS origin. Для локального Go сервера допускается `-AllowHttp`.
 
 Когда контейнер пройдёт проверки и лимит расходов будет настроен для публичного трафика, разрешите вызов без IAM токена через `yc serverless container allow-unauthenticated-invoke vibe-check`. После живой проверки укажите адрес контейнера как основной URL проекта. Статический Sites не проксирует запросы к Go серверу и не является полноценным релизом анализа.
 
@@ -56,3 +70,5 @@ MAX_CONCURRENT_ANALYSES=2
 - [Yandex Cloud: вызов контейнера по HTTPS](https://yandex.cloud/en/docs/serverless-containers/operations/invoke)
 - [Yandex Cloud: Docker credential helper для Container Registry](https://yandex.cloud/en/docs/container-registry/operations/authentication)
 - [Yandex Cloud: публичный вызов контейнера](https://yandex.cloud/en/docs/serverless-containers/operations/container-public)
+- [Yandex Cloud: актуальные параметры `yc serverless container revision deploy`](https://yandex.cloud/en/docs/cli/cli-ref/serverless/cli-ref/container/revision/deploy)
+- [Yandex Cloud: роли Container Registry](https://yandex.cloud/en/docs/container-registry/security/)

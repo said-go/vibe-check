@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vibe-check-v7';
+const CACHE_NAME = 'vibe-check-v8';
 const APP_SHELL = ['/', '/index.html', '/styles.css', '/history.js', '/share-card.js', '/app.js', '/manifest.webmanifest', '/offline.html', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/icon-maskable-512.png'];
 
 self.addEventListener('install', event => {

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -95,7 +96,8 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, r, http.StatusBadRequest, "invalid_multipart", "Multipart body is invalid", false)
 		return
 	}
-	var sanitized imageproc.SanitizedImage
+	var imageBytes []byte
+	var imageType string
 	found := false
 	consented := false
 	consentSeen := false
@@ -134,7 +136,8 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 		}
 		if part.FormName() != "image" {
 			_ = part.Close()
-			continue
+			s.writeError(w, r, http.StatusBadRequest, "unexpected_field", "Only image and privacy_consent fields are allowed", false)
+			return
 		}
 		if found {
 			_ = part.Close()
@@ -142,14 +145,15 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
-		sanitized, err = s.images.Sanitize(part, part.Header.Get("Content-Type"))
+		imageType = part.Header.Get("Content-Type")
+		imageBytes, err = io.ReadAll(part)
 		_ = part.Close()
 		if err != nil {
 			if isBodyTooLarge(err) {
 				s.writeError(w, r, http.StatusRequestEntityTooLarge, "image_too_large", "Image is too large", false)
 				return
 			}
-			s.writeImageError(w, r, err)
+			s.writeError(w, r, http.StatusBadRequest, "invalid_multipart", "Multipart body is invalid", false)
 			return
 		}
 	}
@@ -159,6 +163,12 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 	}
 	if !consented {
 		s.writeError(w, r, http.StatusUnprocessableEntity, "privacy_consent_required", "Consent is required before sending the image to the AI processor", false)
+		return
+	}
+	sanitized, err := s.images.Sanitize(bytes.NewReader(imageBytes), imageType)
+	imageBytes = nil
+	if err != nil {
+		s.writeImageError(w, r, err)
 		return
 	}
 	var idempotencyKey string
