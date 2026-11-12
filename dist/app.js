@@ -5,82 +5,136 @@ const canvas = $('#canvas');
 const ctx = canvas.getContext('2d', { willReadFrequently: true });
 let stream = null;
 let currentImage = '';
+let currentFile = null;
+let activeRequest = null;
+let requestGeneration = 0;
+let cameraGeneration = 0;
+let photoGeneration = 0;
 let deferredInstallPrompt = null;
+const API_BASE = (window.VIBE_API_BASE_URL || '/api').replace(/\/$/, '');
+const steps = ['capture-step', 'consent-step', 'analyzing-step', 'error-step', 'result-step'];
+
+function showStep(id) { steps.forEach(step => { $(`#${step}`).hidden = step !== id; }); }
+function cancelRequest() { requestGeneration++; activeRequest?.abort(); activeRequest = null; }
+function clearPhoto() { photoGeneration++; currentFile = null; currentImage = ''; $('#consent-image').removeAttribute('src'); $('#analysis-image').removeAttribute('src'); $('#result-image').removeAttribute('src'); }
 
 function openModal(withCamera = true) {
+  cancelRequest(); clearPhoto();
   modal.hidden = false;
   document.body.style.overflow = 'hidden';
   resetFlow();
   if (withCamera) startCamera();
 }
-function closeModal() { modal.hidden = true; document.body.style.overflow = ''; stopCamera(); }
-function stopCamera() { if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; video.srcObject = null; }
-function resetFlow() { $('#capture-step').hidden = false; $('#analyzing-step').hidden = true; $('#result-step').hidden = true; $('#share-note').textContent = ''; }
+function closeModal() { cancelRequest(); clearPhoto(); modal.hidden = true; document.body.style.overflow = ''; stopCamera(); }
+function stopCamera() { cameraGeneration++; if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; video.srcObject = null; }
+function resetFlow() { showStep('capture-step'); $('#share-note').textContent = ''; $('#privacy-consent').checked = false; $('#start-analysis').disabled = true; $('#consent-error').textContent = ''; }
 
 async function startCamera() {
+  stopCamera();
+  const generation = cameraGeneration;
   $('#camera-error').textContent = '';
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 } }, audio: false });
+    const cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 } }, audio: false });
+    if (generation !== cameraGeneration || modal.hidden) { cameraStream.getTracks().forEach(t => t.stop()); return; }
+    stream = cameraStream;
     video.srcObject = stream; $('#camera-empty').hidden = true; $('#capture').disabled = false;
   } catch (e) {
+    if (generation !== cameraGeneration || modal.hidden) return;
     $('#camera-empty').hidden = false; $('#capture').disabled = true;
     $('#camera-error').textContent = 'Камера недоступна — можно выбрать фото с устройства.';
   }
 }
 
 function useFile(file) {
-  if (!file || !file.type.startsWith('image/')) return;
+  if (!file) return;
+  if (!['image/jpeg', 'image/png'].includes(file.type) || file.size > 8 * 1024 * 1024) {
+    showError('Нужен JPEG или PNG размером до 8 МБ.', false); return;
+  }
+  const generation = ++photoGeneration;
   const reader = new FileReader();
-  reader.onload = () => analyze(reader.result); reader.readAsDataURL(file);
+  reader.onload = () => { if (generation === photoGeneration && !modal.hidden) previewPhoto(file, reader.result); };
+  reader.onerror = () => { if (generation === photoGeneration && !modal.hidden) showError('Не удалось прочитать фото. Выбери другой файл.', false); };
+  reader.readAsDataURL(file);
 }
 function capture() {
-  canvas.width = video.videoWidth || 720; canvas.height = video.videoHeight || 720;
+  if (!video.videoWidth || !video.videoHeight) return;
+  const generation = ++photoGeneration;
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
   ctx.save(); ctx.translate(canvas.width, 0); ctx.scale(-1, 1); ctx.drawImage(video, 0, 0, canvas.width, canvas.height); ctx.restore();
-  analyze(canvas.toDataURL('image/jpeg', .9));
+  canvas.toBlob(blob => { if (blob && generation === photoGeneration && !modal.hidden) previewPhoto(new File([blob], 'camera.jpg', { type: 'image/jpeg' }), canvas.toDataURL('image/jpeg', .85)); }, 'image/jpeg', .85);
 }
-function imageFeatures(img) {
-  const size = 80; canvas.width = size; canvas.height = size; ctx.drawImage(img, 0, 0, size, size);
-  const data = ctx.getImageData(0, 0, size, size).data; let brightness = 0, color = 0, contrast = 0;
-  const samples = [];
-  for (let i=0;i<data.length;i+=4){ const b=(data[i]+data[i+1]+data[i+2])/3; brightness+=b; color+=Math.max(data[i],data[i+1],data[i+2])-Math.min(data[i],data[i+1],data[i+2]); samples.push(b); }
-  brightness/=samples.length; color/=samples.length;
-  for(const b of samples) contrast += Math.abs(b-brightness); contrast/=samples.length;
-  const normalizedBrightness = Math.round(brightness / 2.55);
-  const normalizedSaturation = Math.min(100, Math.round(color / 1.8));
-  const normalizedContrast = Math.min(100, Math.round(contrast * 2.2));
-  return {
-    brightness: normalizedBrightness,
-    darkness: 100 - normalizedBrightness,
-    saturation: normalizedSaturation,
-    contrast: normalizedContrast,
-    coherence: Math.max(45, Math.min(98, Math.round(72 + normalizedContrast * .12 - normalizedSaturation * .05))),
-    balance: Math.max(0, 100 - Math.abs(55 - normalizedBrightness)),
-    restraint: 100 - normalizedSaturation,
-    originality: Math.min(100, Math.round(normalizedSaturation * .55 + normalizedContrast * .7))
-  };
+function previewPhoto(file, src) {
+  stopCamera(); cancelRequest(); currentFile = file; currentImage = src;
+  $('#consent-image').src = src; $('#privacy-consent').checked = false; $('#start-analysis').disabled = true;
+  $('#consent-error').textContent = ''; showStep('consent-step');
 }
-function analyze(src) {
-  stopCamera(); currentImage = src; $('#capture-step').hidden = true; $('#analyzing-step').hidden = false; $('#analysis-image').src = src;
-  const statuses = ['Считываем цветовой код', 'Проверяем силу образа', 'Замеряем уровень ауры', 'Сверяемся с модным радаром'];
-  let p = 12, i = 0; $('#progress-bar').style.width = p+'%';
-  const timer = setInterval(() => { p += 21 + Math.random()*13; i++; $('#analysis-status').textContent = statuses[Math.min(i, statuses.length-1)]; $('#progress-bar').style.width = Math.min(96,p)+'%'; }, 430);
-  const img = new Image(); img.onload = () => setTimeout(() => { clearInterval(timer); $('#progress-bar').style.width='100%'; showResult(imageFeatures(img)); }, 1900); img.src = src;
+const errorMessages = {
+  privacy_consent_required: 'Подтверди согласие на отправку фото для анализа.',
+  unsupported_image_type: 'Подойдёт только JPEG или PNG. Выбери другое фото.',
+  image_dimensions_too_small: 'Фото слишком маленькое. Нужен кадр хотя бы 320×320 пикселей.',
+  image_dimensions_too_large: 'Фото слишком большое. Сделай или выбери другой кадр.',
+  invalid_image: 'Файл не удалось прочитать как фотографию.',
+  ai_rejected_image: 'AI не смог обработать этот кадр. Попробуй другое фото.',
+  ai_unavailable: 'AI-сервис сейчас недоступен. Повтори попытку позже.',
+  invalid_ai_response: 'Ответ AI не удалось проверить. Попробуй ещё раз.'
+};
+function showError(message, retryable = true) {
+  $('#error-title').textContent = 'НЕ ПОЛУЧИЛОСЬ';
+  $('#error-description').textContent = message;
+  $('#retry-analysis').hidden = !retryable || !currentFile;
+  showStep('error-step');
 }
-function showResult(features) {
-  const score = Math.max(42, Math.min(99, Math.round(features.coherence * .4 + features.balance * .2 + features.originality * .25 + features.contrast * .15)));
-  const category = window.VIBE_TAXONOMY.classify(features).primary;
-  const level = window.VIBE_TAXONOMY.levelFor(score);
-  const style = score, energy = Math.max(44, Math.min(99, score + Math.round(Math.random()*18-7))), aura = Math.max(48, Math.min(99, score + Math.round(Math.random()*15-4)));
-  $('#result-image').src=currentImage; $('#result-score').textContent=score; $('#result-title').textContent=level.title; $('#result-category').textContent=`Стиль: ${category.title}`; $('#result-description').textContent=category.description;
-  $('#style-stat').textContent=style+'%'; $('#energy-stat').textContent=energy+'%'; $('#aura-stat').textContent=aura+'%';
-  $('#analyzing-step').hidden=true; $('#result-step').hidden=false;
+async function analyze() {
+  if (!currentFile || !$('#privacy-consent').checked) return;
+  if (!navigator.onLine) { showError('Для нового AI-анализа нужен интернет.', true); return; }
+  cancelRequest(); const generation = requestGeneration; const controller = new AbortController(); activeRequest = controller;
+  showStep('analyzing-step'); $('#analysis-image').src = currentImage;
+  $('#analysis-status').textContent = 'AI анализирует видимые детали образа'; $('#progress-bar').style.width = '65%';
+  const payload = new FormData(); payload.append('image', currentFile); payload.append('privacy_consent', 'true');
+  try {
+    const response = await fetch(`${API_BASE}/v1/analyses`, { method: 'POST', body: payload, signal: controller.signal });
+    const data = await response.json().catch(() => ({}));
+    if (generation !== requestGeneration || modal.hidden) return;
+    if (!response.ok) {
+      const error = data.error || data;
+      const unavailable = [404, 502, 503, 504].includes(response.status);
+      showError(errorMessages[error.code] || (unavailable ? 'Сервер AI-анализа сейчас недоступен. Попробуй позже.' : 'Не удалось завершить анализ. Попробуй ещё раз.'), unavailable || !!error.retryable);
+      return;
+    }
+    if (!data.result || !['completed', 'low_confidence'].includes(data.status)) throw new Error('invalid_response');
+    $('#progress-bar').style.width = '100%';
+    if (data.status === 'low_confidence') { showError('Не удалось уверенно определить образ. Сделай фото при хорошем освещении, чтобы одежда была видна целиком.', true); return; }
+    showResult(data.result);
+  } catch (error) {
+    if (error.name !== 'AbortError' && generation === requestGeneration && !modal.hidden) {
+      showError(error.message === 'invalid_response' ? 'Сервер AI-анализа пока не настроен или вернул неверный ответ.' : 'Нет связи с сервером анализа. Проверь интернет и попробуй ещё раз.', true);
+    }
+  } finally { if (generation === requestGeneration) activeRequest = null; }
+}
+function showResult(result) {
+  $('#result-image').src = currentImage;
+  $('#result-score').textContent = result.score;
+  $('#result-title').textContent = result.level_title;
+  $('#result-category').textContent = `Стиль: ${result.primary_category.title}`;
+  $('#result-description').textContent = result.summary;
+  $('#style-stat').textContent = `${result.metrics.coherence}%`;
+  $('#energy-stat').textContent = `${result.metrics.originality}%`;
+  $('#aura-stat').textContent = `${result.metrics.color_harmony}%`;
+  $('#result-recommendations').textContent = Array.isArray(result.recommendations) ? result.recommendations.join(' · ') : '';
+  showStep('result-step');
 }
 
 $('#open-camera').addEventListener('click', () => openModal(true));
 $('#file-input').addEventListener('change', e => { openModal(false); useFile(e.target.files[0]); e.target.value=''; });
 $('#modal-file').addEventListener('change', e => { useFile(e.target.files[0]); e.target.value=''; });
 $('#capture').addEventListener('click', capture);
-$('#again').addEventListener('click', () => { resetFlow(); startCamera(); });
+$('#privacy-consent').addEventListener('change', e => { $('#start-analysis').disabled = !e.target.checked; });
+$('#start-analysis').addEventListener('click', analyze);
+$('#retry-analysis').addEventListener('click', analyze);
+function chooseAgain() { cancelRequest(); clearPhoto(); resetFlow(); startCamera(); }
+$('#choose-again').addEventListener('click', chooseAgain);
+$('#error-choose-again').addEventListener('click', chooseAgain);
+$('#again').addEventListener('click', chooseAgain);
 $('#share').addEventListener('click', async () => {
   const text=`Мой результат в ВАЙБЧЕК: ${$('#result-title').textContent}, ${$('#result-category').textContent} — ${$('#result-score').textContent}/100. А ты кто сегодня?`;
   try { if (navigator.share) await navigator.share({title:'Мой вайбчек',text}); else { await navigator.clipboard.writeText(text); $('#share-note').textContent='Результат скопирован — отправляй друзьям!'; } } catch(e) { if(e.name!=='AbortError') $('#share-note').textContent='Не получилось поделиться. Попробуй ещё раз.'; }

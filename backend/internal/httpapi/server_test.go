@@ -24,9 +24,13 @@ const validPayload = `{"contract_version":"1.0.0","dominant_colors":["black","gr
 type fakeVision struct {
 	features analysis.VisualFeatures
 	err      error
+	calls    *int
 }
 
 func (f fakeVision) Analyze(context.Context, []byte) (analysis.VisualFeatures, error) {
+	if f.calls != nil {
+		*f.calls++
+	}
 	return f.features, f.err
 }
 
@@ -47,29 +51,13 @@ func TestHealthAndRequestID(t *testing.T) {
 	}
 }
 
-func TestEvaluate(t *testing.T) {
+func TestInternalScoringRouteIsNotPublic(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/v1/scoring/evaluate", strings.NewReader(validPayload))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	testHandler().ServeHTTP(response, request)
-	if response.Code != http.StatusOK {
+	if response.Code != http.StatusNotFound {
 		t.Fatalf("status %d: %s", response.Code, response.Body.String())
-	}
-	if !strings.Contains(response.Body.String(), `"primary_category"`) {
-		t.Fatalf("missing result: %s", response.Body.String())
-	}
-}
-
-func TestEvaluateRejectsInvalidContract(t *testing.T) {
-	request := httptest.NewRequest(http.MethodPost, "/v1/scoring/evaluate", strings.NewReader(`{"ethnicity":"x"}`))
-	request.Header.Set("Content-Type", "application/json")
-	response := httptest.NewRecorder()
-	testHandler().ServeHTTP(response, request)
-	if response.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("status %d", response.Code)
-	}
-	if !strings.Contains(response.Body.String(), `"invalid_ai_contract"`) {
-		t.Fatalf("unexpected error: %s", response.Body.String())
 	}
 }
 
@@ -110,7 +98,103 @@ func TestAnalyzeImageEndToEnd(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status %d: %s", response.Code, response.Body.String())
 	}
-	if !strings.Contains(response.Body.String(), `"server_image_stored":false`) || !strings.Contains(response.Body.String(), `"external_processor":"openai"`) {
+	if !strings.Contains(response.Body.String(), `"server_image_stored":false`) {
 		t.Fatalf("privacy flag missing: %s", response.Body.String())
+	}
+}
+
+func makeImageRequest(t *testing.T, consent []string, images [][]byte, contentType string) *http.Request {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for _, value := range consent {
+		if err := writer.WriteField("privacy_consent", value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, imageBytes := range images {
+		header := make(textproto.MIMEHeader)
+		header.Set("Content-Disposition", `form-data; name="image"; filename="look.jpg"`)
+		header.Set("Content-Type", contentType)
+		part, err := writer.CreatePart(header)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write(imageBytes); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/v1/analyses", &body)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	return request
+}
+
+func imageFixture(t *testing.T) []byte {
+	t.Helper()
+	var body bytes.Buffer
+	img := image.NewRGBA(image.Rect(0, 0, 320, 320))
+	if err := jpeg.Encode(&body, img, &jpeg.Options{Quality: 80}); err != nil {
+		t.Fatal(err)
+	}
+	return body.Bytes()
+}
+
+func TestAnalyzeRejectsMissingOrDuplicateConsentBeforeProviderCall(t *testing.T) {
+	features, _ := analysis.DecodeFeatures(strings.NewReader(validPayload))
+	for _, tc := range []struct {
+		name      string
+		consent   []string
+		wantCode  int
+		wantError string
+	}{
+		{"missing", nil, http.StatusUnprocessableEntity, "privacy_consent_required"},
+		{"duplicate", []string{"true", "true"}, http.StatusBadRequest, "duplicate_consent"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			handler := New(slog.New(slog.NewTextHandler(io.Discard, nil)), 10<<20, fakeVision{features: features, calls: &calls})
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, makeImageRequest(t, tc.consent, [][]byte{imageFixture(t)}, "image/jpeg"))
+			if response.Code != tc.wantCode || !strings.Contains(response.Body.String(), tc.wantError) {
+				t.Fatalf("status %d, body %s", response.Code, response.Body.String())
+			}
+			if calls != 0 {
+				t.Fatalf("provider was called %d times", calls)
+			}
+		})
+	}
+}
+
+func TestAnalyzeRejectsDuplicateAndMismatchedImages(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		images     [][]byte
+		typeHeader string
+		wantCode   int
+		wantError  string
+	}{
+		{"duplicate", [][]byte{imageFixture(t), imageFixture(t)}, "image/jpeg", http.StatusBadRequest, "multiple_images"},
+		{"type mismatch", [][]byte{imageFixture(t)}, "image/png", http.StatusUnsupportedMediaType, "unsupported_image_type"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			testHandler().ServeHTTP(response, makeImageRequest(t, []string{"true"}, tc.images, tc.typeHeader))
+			if response.Code != tc.wantCode || !strings.Contains(response.Body.String(), tc.wantError) {
+				t.Fatalf("status %d, body %s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestAnalyzeEnforcesBodyLimitWhileReadingImage(t *testing.T) {
+	imageBytes := append(imageFixture(t), bytes.Repeat([]byte("x"), 4096)...)
+	request := makeImageRequest(t, []string{"true"}, [][]byte{imageBytes}, "image/jpeg")
+	response := httptest.NewRecorder()
+	New(slog.New(slog.NewTextHandler(io.Discard, nil)), 1024, vision.Unconfigured{}).ServeHTTP(response, request)
+	if response.Code != http.StatusRequestEntityTooLarge || !strings.Contains(response.Body.String(), "image_too_large") {
+		t.Fatalf("status %d, body %s", response.Code, response.Body.String())
 	}
 }

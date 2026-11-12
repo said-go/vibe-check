@@ -5,13 +5,13 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"runtime/debug"
 	"strings"
 	"time"
 
-	"github.com/said-go/vibe-check/backend/internal/analysis"
 	"github.com/said-go/vibe-check/backend/internal/imageproc"
 	"github.com/said-go/vibe-check/backend/internal/scoring"
 	"github.com/said-go/vibe-check/backend/internal/vision"
@@ -33,7 +33,6 @@ func New(logger *slog.Logger, maxRequestBytes int64, provider vision.Provider) h
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", server.health)
 	mux.HandleFunc("GET /readyz", server.ready)
-	mux.HandleFunc("POST /v1/scoring/evaluate", server.evaluate)
 	mux.HandleFunc("POST /v1/analyses", server.analyzeImage)
 	return server.recoverPanic(server.requestID(server.accessLog(mux)))
 }
@@ -45,37 +44,18 @@ func (s *Server) ready(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 }
 
-func (s *Server) evaluate(w http.ResponseWriter, r *http.Request) {
-	if contentType := r.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "application/json") {
-		s.writeError(w, r, http.StatusUnsupportedMediaType, "unsupported_media_type", "Content-Type must be application/json", false)
-		return
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, s.maxRequestBytes)
-	features, err := analysis.DecodeFeatures(r.Body)
-	if err != nil {
-		s.writeError(w, r, http.StatusUnprocessableEntity, "invalid_ai_contract", "AI feature contract is invalid", false)
-		return
-	}
-	result, err := s.engine.Evaluate(features)
-	if err != nil {
-		s.writeError(w, r, http.StatusUnprocessableEntity, "scoring_failed", "Features cannot be evaluated", false)
-		return
-	}
-	writeJSON(w, http.StatusOK, result)
-}
-
 type analysisResponse struct {
 	AnalysisID string         `json:"analysis_id"`
 	Status     string         `json:"status"`
 	Result     scoring.Result `json:"result"`
 	Privacy    struct {
-		ServerImageStored bool   `json:"server_image_stored"`
-		ExternalProcessor string `json:"external_processor"`
+		ServerImageStored bool `json:"server_image_stored"`
 	} `json:"privacy"`
 }
 
 func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
-	if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+	mediaType, _, typeErr := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if typeErr != nil || mediaType != "multipart/form-data" {
 		s.writeError(w, r, http.StatusUnsupportedMediaType, "unsupported_media_type", "Content-Type must be multipart/form-data", false)
 		return
 	}
@@ -88,12 +68,13 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 	var sanitized imageproc.SanitizedImage
 	found := false
 	consented := false
+	consentSeen := false
 	for {
 		part, partErr := reader.NextPart()
 		if errors.Is(partErr, io.EOF) {
 			break
 		}
-		if errors.Is(partErr, multipart.ErrMessageTooLarge) {
+		if isBodyTooLarge(partErr) {
 			s.writeError(w, r, http.StatusRequestEntityTooLarge, "image_too_large", "Image is too large", false)
 			return
 		}
@@ -102,9 +83,23 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if part.FormName() == "privacy_consent" {
-			value, _ := io.ReadAll(io.LimitReader(part, 16))
-			consented = strings.EqualFold(strings.TrimSpace(string(value)), "true")
+			if consentSeen {
+				_ = part.Close()
+				s.writeError(w, r, http.StatusBadRequest, "duplicate_consent", "Only one privacy_consent field is allowed", false)
+				return
+			}
+			consentSeen = true
+			value, readErr := io.ReadAll(io.LimitReader(part, 17))
 			_ = part.Close()
+			if isBodyTooLarge(readErr) {
+				s.writeError(w, r, http.StatusRequestEntityTooLarge, "image_too_large", "Image is too large", false)
+				return
+			}
+			if readErr != nil || len(value) > 16 {
+				s.writeError(w, r, http.StatusBadRequest, "invalid_consent", "Privacy consent is invalid", false)
+				return
+			}
+			consented = strings.EqualFold(strings.TrimSpace(string(value)), "true")
 			continue
 		}
 		if part.FormName() != "image" {
@@ -120,6 +115,10 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 		sanitized, err = s.images.Sanitize(part, part.Header.Get("Content-Type"))
 		_ = part.Close()
 		if err != nil {
+			if isBodyTooLarge(err) {
+				s.writeError(w, r, http.StatusRequestEntityTooLarge, "image_too_large", "Image is too large", false)
+				return
+			}
 			s.writeImageError(w, r, err)
 			return
 		}
@@ -144,8 +143,12 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 	}
 	response := analysisResponse{AnalysisID: requestIDFrom(r), Status: result.Status, Result: result}
 	response.Privacy.ServerImageStored = false
-	response.Privacy.ExternalProcessor = "openai"
 	writeJSON(w, http.StatusOK, response)
+}
+
+func isBodyTooLarge(err error) bool {
+	var limitErr *http.MaxBytesError
+	return errors.Is(err, multipart.ErrMessageTooLarge) || errors.As(err, &limitErr)
 }
 
 func (s *Server) writeImageError(w http.ResponseWriter, r *http.Request, err error) {

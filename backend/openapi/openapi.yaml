@@ -2,9 +2,9 @@ openapi: 3.1.0
 info:
   title: VibeCheck API
   version: 0.1.0
-  description: API foundation and deterministic scoring contract for VibeCheck.
+  description: Photo analysis API for VibeCheck. Style scoring runs only after consent and AI feature extraction.
 servers:
-  - url: http://localhost:8080
+  - url: http://localhost:8080/api
 paths:
   /healthz:
     get:
@@ -24,31 +24,10 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Status' }
-  /v1/scoring/evaluate:
-    post:
-      operationId: evaluateVisualFeatures
-      description: Internal contract boundary between a Vision AI provider and the deterministic scoring engine.
-      parameters:
-        - in: header
-          name: X-Request-ID
-          schema: { type: string, minLength: 8, maxLength: 80 }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/VisualFeatures' }
-      responses:
-        '200':
-          description: Deterministic scoring result.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ScoringResult' }
-        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
-        '422': { $ref: '#/components/responses/InvalidContract' }
   /v1/analyses:
     post:
       operationId: analyzeImage
-      description: Sanitizes a JPEG or PNG in memory, extracts visual outfit features with Vision AI, then applies deterministic scoring. The image is not persisted.
+      description: Sanitizes one JPEG or PNG in memory, sends it to the configured AI provider after explicit consent, then scores visual outfit features. The image is not persisted by this server. Duplicate image or consent fields are rejected.
       parameters:
         - in: header
           name: X-Request-ID
@@ -73,7 +52,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AnalysisResponse' }
-        '400': { description: Invalid multipart request. }
+        '400': { description: Invalid multipart request, duplicate image or duplicate consent field. }
         '413': { description: Request body is too large. }
         '415': { description: Only JPEG and PNG are supported. }
         '422': { description: Invalid image or AI refusal. }
@@ -82,15 +61,7 @@ paths:
 components:
   responses:
     UnsupportedMediaType:
-      description: Request must use application/json.
-      content:
-        application/json:
-          schema: { $ref: '#/components/schemas/ApiError' }
-    InvalidContract:
-      description: AI response does not satisfy the strict contract.
-      content:
-        application/json:
-          schema: { $ref: '#/components/schemas/ApiError' }
+      description: Request must use multipart/form-data.
   schemas:
     Status:
       type: object
@@ -163,10 +134,9 @@ components:
         privacy:
           type: object
           additionalProperties: false
-          required: [server_image_stored, external_processor]
+          required: [server_image_stored]
           properties:
             server_image_stored: { type: boolean, const: false }
-            external_processor: { type: string, const: openai }
     ApiError:
       type: object
       required: [code, message, request_id, retryable]

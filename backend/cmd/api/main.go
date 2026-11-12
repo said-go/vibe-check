@@ -21,10 +21,17 @@ func main() {
 		os.Exit(1)
 	}
 	var provider vision.Provider = vision.Unconfigured{}
-	if cfg.OpenAIAPIKey != "" && cfg.OpenAIModel != "" {
+	if cfg.AIProvider == "openai" && cfg.OpenAIAPIKey != "" && cfg.OpenAIModel != "" {
 		provider = vision.NewOpenAI(cfg.OpenAIAPIKey, cfg.OpenAIModel, cfg.OpenAIBaseURL, &http.Client{Timeout: cfg.OpenAITimeout})
 	}
-	server := &http.Server{Addr: cfg.Address, Handler: httpapi.New(logger, cfg.MaxRequestBytes, provider), ReadTimeout: cfg.ReadTimeout, WriteTimeout: cfg.WriteTimeout}
+	if cfg.AIProvider == "yandex" && cfg.YandexAPIKey != "" && cfg.YandexFolderID != "" {
+		provider = vision.NewYandex(cfg.YandexAPIKey, cfg.YandexFolderID, cfg.YandexModel, cfg.YandexBaseURL, &http.Client{Timeout: cfg.YandexTimeout})
+	}
+	api := httpapi.New(logger, cfg.MaxRequestBytes, provider)
+	mux := http.NewServeMux()
+	mux.Handle("/api/", http.StripPrefix("/api", api))
+	mux.Handle("/", http.FileServer(http.Dir(cfg.FrontendDir)))
+	server := &http.Server{Addr: cfg.Address, Handler: mux, ReadTimeout: cfg.ReadTimeout, WriteTimeout: cfg.WriteTimeout}
 	errors := make(chan error, 1)
 	go func() {
 		logger.Info("server_started", "address", cfg.Address, "environment", cfg.Environment)

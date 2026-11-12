@@ -24,7 +24,7 @@
     <a class="logo" href="#" aria-label="Вайбчек — на главную"><span>ВАЙБ</span>ЧЕК<span class="logo-dot"></span></a>
     <div class="topbar-actions">
       <button class="install-button" id="install-app" type="button" hidden>Установить</button>
-      <div class="privacy-pill" id="connection-status"><span class="privacy-dot"></span><span>фото остаётся у тебя</span></div>
+      <div class="privacy-pill" id="connection-status"><span class="privacy-dot"></span><span>фото не сохраняется</span></div>
     </div>
   </header>
 
@@ -33,13 +33,13 @@
       <div class="hero-copy">
         <p class="eyebrow">/// экспериментальный детектор стиля</p>
         <h1>КАКОЙ У ТЕБЯ<br /><span class="outlined">СЕГОДНЯ ВАЙБ?</span></h1>
-        <p class="subtitle">Один кадр. Пара секунд. Абсолютно несерьёзный, но подозрительно точный вердикт.</p>
+        <p class="subtitle">Сделай кадр — AI рассмотрит детали одежды, а ВАЙБЧЕК покажет направление стиля и уровень образа.</p>
         <div class="hero-actions">
           <button class="btn btn-primary" id="open-camera">Сканировать себя <span>↗</span></button>
           <label class="btn btn-ghost" for="file-input">Загрузить фото</label>
           <input id="file-input" type="file" accept="image/*" hidden />
         </div>
-        <p class="microcopy">18+ по уровню самоиронии · бесплатно · без регистрации</p>
+        <p class="microcopy">Фото отправляется AI-сервису только после твоего согласия · без регистрации</p>
       </div>
 
       <div class="hero-visual" aria-hidden="true">
@@ -51,7 +51,7 @@
             <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
             <div class="scan-line"></div>
           </div>
-          <div class="metrics"><span>STYLE <b>94</b></span><span>ENERGY <b>87</b></span><span>AURA <b>99</b></span></div>
+          <div class="metrics"><span>STYLE <b>?</b></span><span>ENERGY <b>?</b></span><span>AURA <b>?</b></span></div>
         </div>
         <div class="sticker sticker-one">+100 AURA</div>
         <div class="sticker sticker-two">СИЛЬНЫЙ<br />ОБРАЗ</div>
@@ -59,12 +59,12 @@
     </section>
 
     <section class="scale-section">
-      <div class="section-title"><p class="eyebrow">шкала вайба</p><h2>ОТ «КТО ТЫ?» ДО «ГДЕ КУПИЛ?»</h2></div>
+      <div class="section-title"><p class="eyebrow">направления стиля</p><h2>У КАЖДОГО СВОЙ ВАЙБ</h2></div>
       <div class="scale-track">
-        <article><span class="rank">01</span><div class="emoji">🕸️</div><h3>НЕФОР</h3><p>Дресс-код: против всех</p></article>
-        <article><span class="rank">02</span><div class="emoji">🥀</div><h3>ГОТ</h3><p>Чёрный — тоже цвет</p></article>
-        <article><span class="rank">03</span><div class="emoji">😎</div><h3>ЗДРАВЫЙ</h3><p>Просто хорош</p></article>
-        <article class="hot"><span class="rank">04</span><div class="emoji">🪩</div><h3>СТИЛЯГА</h3><p>Все взгляды сюда</p></article>
+        <article><span class="rank">01</span><div class="emoji">🕸️</div><h3>НЕФОР</h3><p>Свои правила образа</p></article>
+        <article><span class="rank">02</span><div class="emoji">🥀</div><h3>ГОТ</h3><p>Тёмная эстетика</p></article>
+        <article><span class="rank">03</span><div class="emoji">😎</div><h3>CASUAL</h3><p>Уверенно и удобно</p></article>
+        <article class="hot"><span class="rank">04</span><div class="emoji">🪩</div><h3>СПОРТ-ШИК</h3><p>Комфорт с акцентом</p></article>
       </div>
     </section>
   </main>
@@ -88,16 +88,36 @@
         </div>
       </div>
 
+      <div class="consent-step" id="consent-step" hidden>
+        <p class="eyebrow">проверь кадр</p><h2>ГОТОВ К АНАЛИЗУ?</h2>
+        <div class="consent-layout">
+          <img id="consent-image" alt="Предпросмотр выбранного фото" />
+          <div class="consent-copy">
+            <p>После согласия фото будет отправлено на наш сервер. Он удалит метаданные и передаст очищенную копию в Yandex AI Studio для анализа. Наш сервер не сохраняет фото.</p>
+            <label class="consent-label"><input type="checkbox" id="privacy-consent" /> <span>Согласен отправить фото в Yandex AI Studio для анализа</span></label>
+            <p class="camera-error" id="consent-error" role="alert"></p>
+            <div class="modal-actions"><button class="btn btn-primary" id="start-analysis" disabled>Узнать вайб</button><button class="btn btn-ghost" id="choose-again">Другое фото</button></div>
+          </div>
+        </div>
+      </div>
+
       <div class="analyzing-step" id="analyzing-step" hidden>
         <div class="analysis-preview"><img id="analysis-image" alt="Ваше фото" /><div class="analysis-grid"></div><div class="laser"></div></div>
-        <h2>СЧИТЫВАЕМ ВАЙБ...</h2><p id="analysis-status">Оцениваем силу образа</p>
+        <h2>СЧИТЫВАЕМ ВАЙБ...</h2><p id="analysis-status">Отправляем фото на анализ</p>
         <div class="progress"><span id="progress-bar"></span></div>
+      </div>
+
+      <div class="error-step" id="error-step" hidden>
+        <p class="eyebrow">анализ не завершён</p><h2 id="error-title">ПОПРОБУЕМ ЕЩЁ?</h2>
+        <p id="error-description" role="alert"></p>
+        <div class="modal-actions"><button class="btn btn-primary" id="retry-analysis">Повторить</button><button class="btn btn-ghost" id="error-choose-again">Другое фото</button></div>
       </div>
 
       <div class="result-step" id="result-step" hidden>
         <div class="result-photo"><img id="result-image" alt="Ваше фото" /><div class="result-badge" id="result-score">94</div></div>
         <div class="result-copy"><p class="eyebrow">вердикт готов</p><h2 id="result-title">СТИЛЯГА</h2><p class="result-category" id="result-category">Стиль: здравый casual</p><p id="result-description"></p>
-          <div class="stat-list"><div><span>СТИЛЬ</span><b id="style-stat">94%</b></div><div><span>ЭНЕРГИЯ</span><b id="energy-stat">87%</b></div><div><span>АУРА</span><b id="aura-stat">99%</b></div></div>
+          <div class="stat-list"><div><span>ЦЕЛЬНОСТЬ</span><b id="style-stat">—</b></div><div><span>ОРИГИНАЛЬНОСТЬ</span><b id="energy-stat">—</b></div><div><span>ЦВЕТ</span><b id="aura-stat">—</b></div></div>
+          <p id="result-recommendations"></p>
           <div class="modal-actions"><button class="btn btn-primary" id="again">Ещё раз</button><button class="btn btn-ghost" id="share">Поделиться</button></div>
           <p class="share-note" id="share-note" aria-live="polite"></p>
         </div>
@@ -107,7 +127,6 @@
   </div>
 
   <footer><span>ВАЙБЧЕК © 2026</span><span>НЕ ВОСПРИНИМАЙ ВСЕРЬЁЗ · ТЫ УЖЕ ХОРОШ</span></footer>
-  <script src="taxonomy.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

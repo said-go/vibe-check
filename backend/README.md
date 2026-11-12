@@ -1,21 +1,41 @@
 # VibeCheck Backend
 
-Первый backend-этап: HTTP-каркас, строгий контракт признаков Vision AI и детерминированный Scoring Engine.
+Go API для приёма фото, извлечения признаков одежды через Yandex AI Studio и детерминированного расчёта результата. Backend раздаёт `dist/` на `/` и API на `/api`.
 
 ## Запуск
 
-```bash
-go run ./cmd/api
-```
-
-По умолчанию API работает на `http://localhost:8080`.
+Из каталога `backend/` выполните `go run ./cmd/api`, предварительно задав `YANDEX_API_KEY` и `YANDEX_FOLDER_ID` в окружении. Без них development сервер запускается для проверки интерфейса, а анализ возвращает `503 ai_unavailable`. В production отсутствие реквизитов блокирует запуск.
 
 ```text
-GET  /healthz
-GET  /readyz
-POST /v1/scoring/evaluate
-POST /v1/analyses
+GET  /api/healthz
+GET  /api/readyz
+POST /api/v1/analyses
 ```
+
+`POST /api/v1/analyses` принимает ровно одно поле `image` (JPEG/PNG, 320×320 или больше, до 20 мегапикселей) и ровно одно `privacy_consent=true`. Дубли полей отклоняются. Максимальный размер запроса 10 МБ. Фото проверяется, повторно кодируется в JPEG без EXIF и отправляется провайдеру только после согласия. Наш сервер не сохраняет изображение.
+
+## Настройки
+
+| Переменная | По умолчанию |
+|---|---|
+| `APP_ENV` | `development` |
+| `HTTP_ADDRESS` | `:8080` |
+| `FRONTEND_DIR` | `../dist` |
+| `HTTP_READ_TIMEOUT` | `10s` |
+| `HTTP_WRITE_TIMEOUT` | `60s` |
+| `HTTP_MAX_REQUEST_BYTES` | `10485760` |
+| `AI_PROVIDER` | `yandex` |
+| `YANDEX_API_KEY` | нет |
+| `YANDEX_FOLDER_ID` | нет |
+| `YANDEX_MODEL` | `qwen3.6-35b-a3b` |
+| `YANDEX_BASE_URL` | `https://ai.api.cloud.yandex.net/v1` |
+| `YANDEX_TIMEOUT` | `45s` |
+
+Альтернативный провайдер `AI_PROVIDER=openai` использует `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BASE_URL` и `OPENAI_TIMEOUT`. Секреты держите в окружении хостинга, не в Git.
+
+Для Yandex API ключу нужен scope `yc.ai.foundationModels.execute`, а сервисному аккаунту роль `ai.languageModels.user` для каталога. Подробнее в [документации Yandex AI Studio](https://aistudio.yandex.ru/en/docs/ai-studio/operations/generation/multimodels-request).
+
+Строгий контракт признаков: [openapi/ai-features.schema.json](openapi/ai-features.schema.json). Он не содержит национальности, религии, привлекательности, здоровья и иных чувствительных выводов. HTTP контракт: [openapi/openapi.yaml](openapi/openapi.yaml).
 
 ## Проверка
 
@@ -23,33 +43,3 @@ POST /v1/analyses
 go test ./...
 go vet ./...
 ```
-
-## Конфигурация
-
-| Переменная | Значение по умолчанию |
-|---|---|
-| `APP_ENV` | `development` |
-| `HTTP_ADDRESS` | `:8080` |
-| `HTTP_READ_TIMEOUT` | `10s` |
-| `HTTP_WRITE_TIMEOUT` | `20s` |
-| `HTTP_SHUTDOWN_TIMEOUT` | `10s` |
-| `HTTP_MAX_REQUEST_BYTES` | `10485760` |
-| `OPENAI_API_KEY` | отсутствует |
-| `OPENAI_MODEL` | отсутствует |
-| `OPENAI_BASE_URL` | `https://api.openai.com/v1` |
-| `OPENAI_TIMEOUT` | `45s` |
-
-`openapi/ai-features.schema.json` является версионированным контрактом ответа AI. Не добавляй в него национальность, религию, привлекательность, здоровье или другие чувствительные выводы.
-
-## Анализ фотографии
-
-`POST /v1/analyses` принимает одну фотографию в multipart-поле `image` и обязательное поле `privacy_consent=true`. Поддерживаются JPEG и PNG размером от 320×320 до 20 мегапикселей. Сервер:
-
-1. проверяет сигнатуру файла и размеры до полного декодирования;
-2. декодирует изображение только в памяти;
-3. повторно кодирует его в JPEG, удаляя EXIF и геолокацию;
-4. отправляет очищенную копию в OpenAI Responses API;
-5. проверяет Structured Output по строгому контракту;
-6. рассчитывает итог отдельным Scoring Engine.
-
-Фотография не записывается нашим сервером на диск, в базу или в логи, но очищенная копия передаётся внешнему обработчику OpenAI только после явного согласия. Без `OPENAI_API_KEY` и `OPENAI_MODEL` сервер запускается в development, но endpoint анализа возвращает `ai_unavailable`. В production отсутствие этих переменных блокирует запуск.
