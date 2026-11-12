@@ -8,10 +8,7 @@
 
 ## Готово к работе
 
-- [#3 — VC-06: каркас Backend API](https://github.com/said-go/vibe-check/issues/3)
-- [#5 — VC-08: контракт AI-ответа](https://github.com/said-go/vibe-check/issues/5)
 - [#6 — VC-09: интеграция Vision AI](https://github.com/said-go/vibe-check/issues/6)
-- [#7 — VC-10: Scoring Engine](https://github.com/said-go/vibe-check/issues/7)
 - [#8 — VC-11: безопасная загрузка фото](https://github.com/said-go/vibe-check/issues/8)
 - [#9 — VC-12: вертикальный AI-сценарий](https://github.com/said-go/vibe-check/issues/9)
 - [#10 — VC-14: автотесты MVP](https://github.com/said-go/vibe-check/issues/10)
@@ -34,6 +31,9 @@
 - [x] [#1 — VC-04: PWA-установка](https://github.com/said-go/vibe-check/issues/1)
 - [x] [#2 — VC-05: Service Worker и offline-режим](https://github.com/said-go/vibe-check/issues/2)
 - [x] [#4 — VC-07: таксономия категорий](https://github.com/said-go/vibe-check/issues/4)
+- [x] [#3 — VC-06: каркас Backend API](https://github.com/said-go/vibe-check/issues/3)
+- [x] [#5 — VC-08: контракт AI-ответа](https://github.com/said-go/vibe-check/issues/5)
+- [x] [#7 — VC-10: Scoring Engine](https://github.com/said-go/vibe-check/issues/7)
 
 ## Правила доски
 

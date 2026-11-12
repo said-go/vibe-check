@@ -1,0 +1,46 @@
+package main
+
+import (
+	"context"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/said-go/vibe-check/backend/internal/config"
+	"github.com/said-go/vibe-check/backend/internal/httpapi"
+)
+
+func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	cfg, err := config.Load()
+	if err != nil {
+		logger.Error("invalid_configuration", "error", err)
+		os.Exit(1)
+	}
+	server := &http.Server{Addr: cfg.Address, Handler: httpapi.New(logger, cfg.MaxRequestBytes), ReadTimeout: cfg.ReadTimeout, WriteTimeout: cfg.WriteTimeout}
+	errors := make(chan error, 1)
+	go func() {
+		logger.Info("server_started", "address", cfg.Address, "environment", cfg.Environment)
+		errors <- server.ListenAndServe()
+	}()
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	select {
+	case signal := <-stop:
+		logger.Info("shutdown_requested", "signal", signal.String())
+	case err := <-errors:
+		if err != http.ErrServerClosed {
+			logger.Error("server_failed", "error", err)
+			os.Exit(1)
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	defer cancel()
+	if err := server.Shutdown(ctx); err != nil {
+		logger.Error("shutdown_failed", "error", err)
+		os.Exit(1)
+	}
+	logger.Info("server_stopped")
+}

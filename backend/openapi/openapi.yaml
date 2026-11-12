@@ -1,0 +1,129 @@
+openapi: 3.1.0
+info:
+  title: VibeCheck API
+  version: 0.1.0
+  description: API foundation and deterministic scoring contract for VibeCheck.
+servers:
+  - url: http://localhost:8080
+paths:
+  /healthz:
+    get:
+      operationId: health
+      responses:
+        '200':
+          description: Process is alive.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Status' }
+  /readyz:
+    get:
+      operationId: ready
+      responses:
+        '200':
+          description: Process is ready to accept requests.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Status' }
+  /v1/scoring/evaluate:
+    post:
+      operationId: evaluateVisualFeatures
+      description: Internal contract boundary between a Vision AI provider and the deterministic scoring engine.
+      parameters:
+        - in: header
+          name: X-Request-ID
+          schema: { type: string, minLength: 8, maxLength: 80 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VisualFeatures' }
+      responses:
+        '200':
+          description: Deterministic scoring result.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScoringResult' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/InvalidContract' }
+components:
+  responses:
+    UnsupportedMediaType:
+      description: Request must use application/json.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    InvalidContract:
+      description: AI response does not satisfy the strict contract.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+  schemas:
+    Status:
+      type: object
+      required: [status]
+      properties: { status: { type: string } }
+    Score:
+      type: integer
+      minimum: 0
+      maximum: 100
+    Signals:
+      type: object
+      additionalProperties: false
+      required: [goth, alternative, streetwear, classic, sport_chic]
+      properties:
+        goth: { $ref: '#/components/schemas/Score' }
+        alternative: { $ref: '#/components/schemas/Score' }
+        streetwear: { $ref: '#/components/schemas/Score' }
+        classic: { $ref: '#/components/schemas/Score' }
+        sport_chic: { $ref: '#/components/schemas/Score' }
+    VisualFeatures:
+      type: object
+      additionalProperties: false
+      required: [contract_version, dominant_colors, color_harmony, darkness, formality, sportiness, originality, outfit_coherence, accessory_intensity, layering, traditional_elements, image_quality, outfit_visibility, confidence, person_count, subculture_signals]
+      properties:
+        contract_version: { type: string, const: 1.0.0 }
+        dominant_colors: { type: array, minItems: 1, maxItems: 5, items: { type: string } }
+        color_harmony: { $ref: '#/components/schemas/Score' }
+        darkness: { $ref: '#/components/schemas/Score' }
+        formality: { $ref: '#/components/schemas/Score' }
+        sportiness: { $ref: '#/components/schemas/Score' }
+        originality: { $ref: '#/components/schemas/Score' }
+        outfit_coherence: { $ref: '#/components/schemas/Score' }
+        accessory_intensity: { $ref: '#/components/schemas/Score' }
+        layering: { $ref: '#/components/schemas/Score' }
+        traditional_elements: { $ref: '#/components/schemas/Score' }
+        image_quality: { $ref: '#/components/schemas/Score' }
+        outfit_visibility: { $ref: '#/components/schemas/Score' }
+        confidence: { $ref: '#/components/schemas/Score' }
+        person_count: { type: integer, minimum: 0, maximum: 10 }
+        subculture_signals: { $ref: '#/components/schemas/Signals' }
+    CategoryScore:
+      type: object
+      required: [code, title, score]
+      properties:
+        code: { type: string }
+        title: { type: string }
+        score: { $ref: '#/components/schemas/Score' }
+    ScoringResult:
+      type: object
+      required: [status, primary_category, secondary_category, level, level_title, score, confidence, metrics, summary, recommendations]
+      properties:
+        status: { type: string, enum: [completed, low_confidence] }
+        primary_category: { $ref: '#/components/schemas/CategoryScore' }
+        secondary_category: { $ref: '#/components/schemas/CategoryScore' }
+        level: { type: string }
+        level_title: { type: string }
+        score: { $ref: '#/components/schemas/Score' }
+        confidence: { $ref: '#/components/schemas/Score' }
+        metrics: { type: object, additionalProperties: { $ref: '#/components/schemas/Score' } }
+        summary: { type: string }
+        recommendations: { type: array, items: { type: string } }
+        low_confidence_reason: { type: string }
+    ApiError:
+      type: object
+      required: [code, message, request_id, retryable]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        request_id: { type: string }
+        retryable: { type: boolean }

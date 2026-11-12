@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibe-check.example/schemas/ai-features-1.0.0.json",
+  "title": "VibeCheckVisualFeatures",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version", "dominant_colors", "color_harmony", "darkness", "formality",
+    "sportiness", "originality", "outfit_coherence", "accessory_intensity", "layering",
+    "traditional_elements", "image_quality", "outfit_visibility", "confidence",
+    "person_count", "subculture_signals"
+  ],
+  "properties": {
+    "contract_version": { "const": "1.0.0" },
+    "dominant_colors": { "type": "array", "minItems": 1, "maxItems": 5, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 32 } },
+    "color_harmony": { "$ref": "#/$defs/score" },
+    "darkness": { "$ref": "#/$defs/score" },
+    "formality": { "$ref": "#/$defs/score" },
+    "sportiness": { "$ref": "#/$defs/score" },
+    "originality": { "$ref": "#/$defs/score" },
+    "outfit_coherence": { "$ref": "#/$defs/score" },
+    "accessory_intensity": { "$ref": "#/$defs/score" },
+    "layering": { "$ref": "#/$defs/score" },
+    "traditional_elements": { "$ref": "#/$defs/score", "description": "Visible garment details only; never infer ethnicity, nationality or religion." },
+    "image_quality": { "$ref": "#/$defs/score" },
+    "outfit_visibility": { "$ref": "#/$defs/score" },
+    "confidence": { "$ref": "#/$defs/score" },
+    "person_count": { "type": "integer", "minimum": 0, "maximum": 10 },
+    "subculture_signals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goth", "alternative", "streetwear", "classic", "sport_chic"],
+      "properties": {
+        "goth": { "$ref": "#/$defs/score" },
+        "alternative": { "$ref": "#/$defs/score" },
+        "streetwear": { "$ref": "#/$defs/score" },
+        "classic": { "$ref": "#/$defs/score" },
+        "sport_chic": { "$ref": "#/$defs/score" }
+      }
+    }
+  },
+  "$defs": { "score": { "type": "integer", "minimum": 0, "maximum": 100 } }
+}
