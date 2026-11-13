@@ -29,8 +29,6 @@ const PHOTO_PRESETS = Object.freeze({
     title: 'Пупсик', summary: 'Мягкий человек с доброй душой, но очень наивный'
   }
 });
-const NORMAL_CONSENT_DESCRIPTION = 'После согласия фото будет отправлено на наш сервер. Он удалит метаданные и передаст очищенную копию в Yandex AI Studio для анализа. Наш сервер не сохраняет фото.';
-const NORMAL_CONSENT_LABEL = 'Согласен отправить фото в Yandex AI Studio для анализа';
 async function presetForFile(file) {
   if (!crypto.subtle) return null;
   const bytes = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
@@ -177,9 +175,6 @@ async function capture() {
 }
 function previewPhoto(file, src, preset = null) {
   stopCamera(); cancelRequest(); currentFile = file; currentPreset = preset; currentImage = src; analysisKey = crypto.randomUUID();
-  $('#consent-description').textContent = preset ? 'Это фото совпало с заранее заданным примером. Ответ покажем здесь; фото никуда не отправим.' : NORMAL_CONSENT_DESCRIPTION;
-  $('#consent-label-text').textContent = preset ? 'Показать заранее заданный ответ' : NORMAL_CONSENT_LABEL;
-  $('#start-analysis').textContent = preset ? 'Показать результат' : 'Узнать вайб';
   $('#consent-image').src = src; $('#privacy-consent').checked = false; $('#start-analysis').disabled = true;
   $('#consent-error').textContent = ''; showStep('consent-step');
 }
@@ -247,7 +242,7 @@ async function analyze() {
   if (currentPreset) {
     const preset = currentPreset;
     showResult({
-      status: 'completed', score: null, level_title: 'Особый вердикт',
+      status: 'completed', score: null, level_title: 'Вайб найден',
       primary_category: { title: preset.title }, summary: preset.summary,
       metrics: { coherence: null, originality: null, color_harmony: null }, recommendations: []
     }, analysisKey);
@@ -301,9 +296,10 @@ function showResult(result, analysisId) {
   $('#save-result').disabled = false;
   $('#save-result').textContent = 'Сохранить в историю';
   $('#result-image').src = currentImage;
-  $('#result-score').textContent = preset ? '★' : result.score;
+  $('#result-score').hidden = preset;
+  $('#result-score').textContent = preset ? '' : result.score;
   $('#result-title').textContent = preset ? result.primary_category.title : result.level_title;
-  $('#result-category').textContent = preset ? 'Особый вердикт' : `Стиль: ${result.primary_category.title}`;
+  $('#result-category').textContent = preset ? 'Вердикт по фото' : `Стиль: ${result.primary_category.title}`;
   $('#result-description').textContent = result.summary;
   $('#result-stats').hidden = preset;
   $('#style-stat').textContent = preset ? '—' : `${result.metrics.coherence}%`;
@@ -315,7 +311,7 @@ function showResult(result, analysisId) {
 
 function resultText(record) {
   return record.score == null
-    ? `Мой особый вердикт в ВАЙБЧЕК: ${record.category}. ${record.summary}`
+    ? `Мой результат в ВАЙБЧЕК: ${record.category}. ${record.summary}`
     : `Мой результат в ВАЙБЧЕК: ${record.levelTitle}, стиль ${record.category} — ${record.score}/100. А ты кто сегодня?`;
 }
 
@@ -328,8 +324,9 @@ function historyCard(record) {
   date.dateTime = new Date(record.createdAt).toISOString();
   date.textContent = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium' }).format(record.createdAt);
   const score = document.createElement('strong');
-  score.textContent = record.score == null ? '★' : `${record.score}/100`;
-  top.append(date, score);
+  score.textContent = record.score == null ? '' : `${record.score}/100`;
+  top.append(date);
+  if (record.score != null) top.append(score);
   const title = document.createElement('h3');
   title.textContent = record.levelTitle;
   const category = document.createElement('p');
