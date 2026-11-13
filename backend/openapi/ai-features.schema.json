@@ -28,6 +28,10 @@
     "person_count": { "type": "integer", "minimum": 0, "maximum": 10 },
     "skullcap_visible": { "type": "boolean", "description": "True only when a skullcap is clearly visible on the main subject." },
     "beard_visible": { "type": "boolean", "description": "True only when a beard is visible on the same subject. These are visual cues, not a religious or occupational inference." },
+    "unnatural_hair_color_visible": { "type": "boolean", "description": "Clearly dyed non-natural hair color on the main subject; false when unclear." },
+    "piercing_visible": { "type": "boolean", "description": "Clearly visible piercing on the main subject, excluding a single ordinary earring." },
+    "hair_below_ears_visible": { "type": "boolean", "description": "Hair visibly extends below the ears; a weak style cue alone." },
+    "hair_over_eyes_visible": { "type": "boolean", "description": "Hair visibly covers one or both eyes; a weak style cue alone." },
     "subculture_signals": {
       "type": "object",
       "additionalProperties": false,

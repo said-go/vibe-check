@@ -32,6 +32,14 @@ func TestDecodeVisibleSkullcapAndBeard(t *testing.T) {
 	}
 }
 
+func TestDecodeAlternativeStyleCues(t *testing.T) {
+	input := strings.Replace(validJSON, `"person_count":1,`, `"person_count":1,"unnatural_hair_color_visible":true,"piercing_visible":true,"hair_below_ears_visible":true,"hair_over_eyes_visible":true,`, 1)
+	features, err := DecodeFeatures(strings.NewReader(input))
+	if err != nil || !features.UnnaturalHairColor || !features.PiercingVisible || !features.HairBelowEars || !features.HairOverEyes {
+		t.Fatalf("features = %+v, error = %v", features, err)
+	}
+}
+
 func TestDecodeWithoutRecognizableClothingColor(t *testing.T) {
 	input := strings.Replace(validJSON, `["black","gray"]`, `[]`, 1)
 	features, err := DecodeFeatures(strings.NewReader(input))

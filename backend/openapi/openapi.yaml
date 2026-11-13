@@ -112,6 +112,10 @@ components:
         person_count: { type: integer, minimum: 0, maximum: 10 }
         skullcap_visible: { type: boolean, description: 'True only for a clearly visible skullcap on the main subject.' }
         beard_visible: { type: boolean, description: 'True only for a beard on the same subject; no religious or occupational inference.' }
+        unnatural_hair_color_visible: { type: boolean, description: 'Clearly dyed non-natural hair color on the main subject.' }
+        piercing_visible: { type: boolean, description: 'Clearly visible piercing on the main subject; excludes a single ordinary earring.' }
+        hair_below_ears_visible: { type: boolean, description: 'Hair visibly extends below the ears; weak cue alone.' }
+        hair_over_eyes_visible: { type: boolean, description: 'Hair visibly covers one or both eyes; weak cue alone.' }
         subculture_signals: { $ref: '#/components/schemas/Signals' }
     CategoryScore:
       type: object

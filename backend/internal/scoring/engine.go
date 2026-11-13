@@ -44,13 +44,13 @@ type Engine struct{ rules []rule }
 
 func NewEngine() *Engine {
 	return &Engine{rules: []rule{
-		{Code: "urban_classic", Title: "Строгий городской", Summary: "Собранный городской образ: спокойно, уверенно и без лишнего шума.", Weights: map[featureName]float64{"formality": .30, "coherence": .25, "classic": .25, "harmony": .15, "accessories": .05}},
-		{Code: "healthy_casual", Title: "Здравый casual", Summary: "Удобный и цельный образ, который выглядит уверенно без лишней демонстративности.", Weights: map[featureName]float64{"coherence": .35, "harmony": .25, "sportiness": .15, "classic": .15, "originality": .10}},
-		{Code: "sport_chic", Title: "Спорт-шик", Summary: "Динамичный образ, в котором комфорт работает вместе с заметными деталями.", Weights: map[featureName]float64{"sport_chic": .35, "sportiness": .30, "coherence": .20, "originality": .15}},
-		{Code: "streetwear", Title: "Streetwear", Summary: "Городская энергия, свободные сочетания и выразительные детали.", Weights: map[featureName]float64{"streetwear": .45, "originality": .25, "sportiness": .15, "accessories": .15}},
-		{Code: "alternative", Title: "Нефор", Summary: "Нестандартный образ с выразительными деталями и собственным визуальным языком.", Weights: map[featureName]float64{"alternative": .50, "originality": .25, "accessories": .15, "layering": .10}},
-		{Code: "goth", Title: "Гот", Summary: "Тёмная палитра, драматичный контраст и собранная альтернативная эстетика.", Weights: map[featureName]float64{"goth": .45, "darkness": .30, "coherence": .15, "layering": .10}},
-		{Code: "traditional_accent", Title: "Традиционный акцент", Summary: "Современный образ дополнен заметными традиционными элементами.", Weights: map[featureName]float64{"traditional": .55, "coherence": .25, "harmony": .20}},
+		{Code: "urban_classic", Title: "Строгий городской", Summary: "Аккуратная одежда в спокойном городском стиле.", Weights: map[featureName]float64{"formality": .30, "coherence": .25, "classic": .25, "harmony": .15, "accessories": .05}},
+		{Code: "healthy_casual", Title: "Здравый casual", Summary: "Удобная одежда, цвета и вещи хорошо сочетаются.", Weights: map[featureName]float64{"coherence": .35, "harmony": .25, "sportiness": .15, "classic": .15, "originality": .10}},
+		{Code: "sport_chic", Title: "Спорт-шик", Summary: "Удобный образ со спортивными деталями.", Weights: map[featureName]float64{"sport_chic": .35, "sportiness": .30, "coherence": .20, "originality": .15}},
+		{Code: "streetwear", Title: "Streetwear", Summary: "Свободная городская одежда с заметными деталями.", Weights: map[featureName]float64{"streetwear": .45, "originality": .25, "sportiness": .15, "accessories": .15}},
+		{Code: "alternative", Title: "Нефор", Summary: "Необычные детали и свой стиль. Цвет волос, пирсинг и причёска — только подсказки.", Weights: map[featureName]float64{"alternative": .45, "originality": .20, "accessories": .10, "layering": .05, "unnatural_hair_color": .10, "piercing": .05, "hair_below_ears": .03, "hair_over_eyes": .02}},
+		{Code: "goth", Title: "Гот", Summary: "Тёмная одежда и заметный контраст.", Weights: map[featureName]float64{"goth": .45, "darkness": .30, "coherence": .15, "layering": .10}},
+		{Code: "traditional_accent", Title: "Традиционный акцент", Summary: "В одежде или аксессуарах заметен традиционный элемент.", Weights: map[featureName]float64{"traditional": .55, "coherence": .25, "harmony": .20}},
 	}}
 }
 
@@ -140,6 +140,26 @@ func value(f analysis.VisualFeatures, name featureName) int {
 		return f.Signals.Streetwear
 	case "alternative":
 		return f.Signals.Alternative
+	case "unnatural_hair_color":
+		if f.UnnaturalHairColor {
+			return 100
+		}
+		return 0
+	case "piercing":
+		if f.PiercingVisible {
+			return 100
+		}
+		return 0
+	case "hair_below_ears":
+		if f.HairBelowEars {
+			return 100
+		}
+		return 0
+	case "hair_over_eyes":
+		if f.HairOverEyes {
+			return 100
+		}
+		return 0
 	case "layering":
 		return f.Layering
 	case "goth":

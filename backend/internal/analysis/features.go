@@ -36,6 +36,10 @@ type VisualFeatures struct {
 	PersonCount         int               `json:"person_count"`
 	SkullcapVisible     bool              `json:"skullcap_visible"`
 	BeardVisible        bool              `json:"beard_visible"`
+	UnnaturalHairColor  bool              `json:"unnatural_hair_color_visible"`
+	PiercingVisible     bool              `json:"piercing_visible"`
+	HairBelowEars       bool              `json:"hair_below_ears_visible"`
+	HairOverEyes        bool              `json:"hair_over_eyes_visible"`
 	Signals             SubcultureSignals `json:"subculture_signals"`
 }
 

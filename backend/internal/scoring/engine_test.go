@@ -119,3 +119,50 @@ func TestMulaRequiresVisibleSkullcapAndBeard(t *testing.T) {
 		})
 	}
 }
+
+func TestHairAndPiercingAreSupportingCues(t *testing.T) {
+	engine := NewEngine()
+	features := baseFeatures()
+	features.UnnaturalHairColor = true
+	features.PiercingVisible = true
+	features.HairBelowEars = true
+	features.HairOverEyes = true
+	result, err := engine.Evaluate(features)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.PrimaryCategory.Code != "healthy_casual" {
+		t.Fatalf("appearance cues alone changed category: %q", result.PrimaryCategory.Code)
+	}
+
+	features = baseFeatures()
+	features.Signals.Alternative = 55
+	features.Signals.Classic = 35
+	features.Signals.Streetwear = 20
+	features.Signals.Goth = 10
+	features.Signals.SportChic = 15
+	features.TraditionalElements = 0
+	features.OutfitCoherence = 65
+	features.ColorHarmony = 60
+	features.Sportiness = 25
+	features.Formality = 20
+	features.Darkness = 35
+	withoutCues, err := engine.Evaluate(features)
+	if err != nil {
+		t.Fatal(err)
+	}
+	features.HairBelowEars = true
+	withLongHair, err := engine.Evaluate(features)
+	if err != nil {
+		t.Fatal(err)
+	}
+	features.UnnaturalHairColor = true
+	features.PiercingVisible = true
+	withSeveralCues, err := engine.Evaluate(features)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withoutCues.PrimaryCategory.Code == "alternative" || withLongHair.PrimaryCategory.Code == "alternative" || withSeveralCues.PrimaryCategory.Code != "alternative" {
+		t.Fatalf("cues should support, not dictate: no=%q long=%q several=%q", withoutCues.PrimaryCategory.Code, withLongHair.PrimaryCategory.Code, withSeveralCues.PrimaryCategory.Code)
+	}
+}
