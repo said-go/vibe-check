@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/said-go/vibe-check/backend/internal/analysis"
 )
@@ -44,13 +45,13 @@ type Engine struct{ rules []rule }
 
 func NewEngine() *Engine {
 	return &Engine{rules: []rule{
-		{Code: "urban_classic", Title: "Строгий городской", Summary: "Аккуратная одежда в спокойном городском стиле.", Weights: map[featureName]float64{"formality": .30, "coherence": .25, "classic": .25, "harmony": .15, "accessories": .05}},
-		{Code: "healthy_casual", Title: "Здравый casual", Summary: "Удобная одежда, цвета и вещи хорошо сочетаются.", Weights: map[featureName]float64{"coherence": .35, "harmony": .25, "sportiness": .15, "classic": .15, "originality": .10}},
-		{Code: "sport_chic", Title: "Спорт-шик", Summary: "Удобный образ со спортивными деталями.", Weights: map[featureName]float64{"sport_chic": .35, "sportiness": .30, "coherence": .20, "originality": .15}},
-		{Code: "streetwear", Title: "Streetwear", Summary: "Свободная городская одежда с заметными деталями.", Weights: map[featureName]float64{"streetwear": .45, "originality": .25, "sportiness": .15, "accessories": .15}},
-		{Code: "alternative", Title: "Нефор", Summary: "Необычные детали и свой стиль. Цвет волос, пирсинг и причёска — только подсказки.", Weights: map[featureName]float64{"alternative": .45, "originality": .20, "accessories": .10, "layering": .05, "unnatural_hair_color": .10, "piercing": .05, "hair_below_ears": .03, "hair_over_eyes": .02}},
-		{Code: "goth", Title: "Гот", Summary: "Тёмная одежда и заметный контраст.", Weights: map[featureName]float64{"goth": .45, "darkness": .30, "coherence": .15, "layering": .10}},
-		{Code: "traditional_accent", Title: "Традиционный акцент", Summary: "В одежде или аксессуарах заметен традиционный элемент.", Weights: map[featureName]float64{"traditional": .55, "coherence": .25, "harmony": .20}},
+		{Code: "urban_classic", Title: "Собранный", Summary: "Всё аккуратно. Выглядишь так, будто у тебя встреча. Даже если встреча — с шаурмой.", Weights: map[featureName]float64{"formality": .30, "coherence": .25, "classic": .25, "harmony": .15, "accessories": .05}},
+		{Code: "healthy_casual", Title: "Здравый стиль", Summary: "Вещи подружились. Можно выходить без совета семейного чата.", Weights: map[featureName]float64{"coherence": .35, "harmony": .25, "sportiness": .15, "classic": .15, "originality": .10}},
+		{Code: "sport_chic", Title: "Спорт-шик", Summary: "И за кофе, и на тренировку. Образ готов к обоим планам.", Weights: map[featureName]float64{"sport_chic": .35, "sportiness": .30, "coherence": .20, "originality": .15}},
+		{Code: "streetwear", Title: "Уличный стиль", Summary: "Свободная одежда и заметные детали. Город — твой подиум, маршрутка — первый ряд.", Weights: map[featureName]float64{"streetwear": .45, "originality": .25, "sportiness": .15, "accessories": .15}},
+		{Code: "alternative", Title: "Нефор", Summary: "Одежда с характером. У деталей явно свои планы.", Weights: map[featureName]float64{"alternative": .45, "originality": .20, "accessories": .10, "layering": .05, "unnatural_hair_color": .10, "piercing": .05, "hair_below_ears": .03, "hair_over_eyes": .02}},
+		{Code: "goth", Title: "Гот", Summary: "Тёмные вещи взяли слово. Похоже, спорить с ними бесполезно.", Weights: map[featureName]float64{"goth": .45, "darkness": .30, "coherence": .15, "layering": .10}},
+		{Code: "traditional_accent", Title: "С традицией", Summary: "Традиционная деталь держит образ. Остальные вещи ей подыгрывают.", Weights: map[featureName]float64{"traditional": .55, "coherence": .25, "harmony": .20}},
 	}}
 }
 
@@ -81,7 +82,7 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 	overall := clamp(int(math.Round(float64(features.OutfitCoherence)*.45 + float64(features.ColorHarmony)*.30 + float64(features.Originality)*.25)))
 	primaryRule := e.ruleByCode(ranked[0].Code)
 	if ranked[0].Code == "mula" {
-		primaryRule.Summary = "Образ с тюбетейкой и бородой. Название категории описывает только видимые детали стиля."
+		primaryRule.Summary = "На фото видны тюбетейка и борода. Про человека по одежде не гадаем."
 	}
 	result := Result{
 		Status: "completed", PrimaryCategory: ranked[0], SecondaryCategory: ranked[1],
@@ -89,24 +90,47 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 		Metrics: Metrics{Coherence: features.OutfitCoherence, Originality: features.Originality, ColorHarmony: features.ColorHarmony},
 		Summary: primaryRule.Summary, Recommendations: recommendations(features),
 	}
+	if ranked[0].Code == "alternative" {
+		result.Summary += alternativeDetails(features)
+	}
 	if features.OutfitVisibility < 60 {
-		result.Summary += " Оценка по видимой части образа."
+		result.Summary += " Одежду видно не целиком — смотрим по тому, что попало в кадр."
 	}
 	if features.ImageQuality < 55 {
-		result.Summary += " Точность ограничена качеством кадра."
+		result.Summary += " Кадр нечёткий, так что можем промахнуться."
 	}
 	if features.Confidence < 70 {
-		result.Summary += " Оценка предварительная."
+		result.Summary += " Это примерный вердикт."
 	}
 	if reason := features.LowConfidenceReason(); reason != "" {
 		result.Status = "low_confidence"
 		result.LowConfidenceReason = reason
 		result.PrimaryCategory = CategoryScore{}
 		result.SecondaryCategory = CategoryScore{}
-		result.Summary = "Не удалось уверенно определить стиль образа."
-		result.Recommendations = []string{"Покажи хотя бы одну вещь одежды в кадре", "Оставь в кадре одного человека"}
+		result.Summary = "Не разглядели одежду. Покажи её на другом фото."
+		result.Recommendations = []string{"Покажи хотя бы одну вещь одежды", "Оставь в кадре одного человека"}
 	}
 	return result, nil
+}
+
+func alternativeDetails(f analysis.VisualFeatures) string {
+	items := make([]string, 0, 4)
+	if f.UnnaturalHairColor {
+		items = append(items, "яркий цвет волос")
+	}
+	if f.PiercingVisible {
+		items = append(items, "пирсинг")
+	}
+	if f.HairBelowEars {
+		items = append(items, "длинные волосы")
+	}
+	if f.HairOverEyes {
+		items = append(items, "чёлка на глаза")
+	}
+	if len(items) == 0 {
+		return ""
+	}
+	return " Ещё в кадре: " + strings.Join(items, ", ") + ". Это добавило баллов стилю."
 }
 
 func (e *Engine) ruleByCode(code string) rule {

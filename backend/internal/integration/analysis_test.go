@@ -115,7 +115,7 @@ func TestPhotoToYandexToResult(t *testing.T) {
 			if tc.wantStatus == "completed" && (result.Result.Score != 82 || result.Result.PrimaryCategory.Code == "") {
 				t.Fatalf("completed score or category invalid: %+v", result.Result)
 			}
-			if tc.name == "partial outfit" && !strings.Contains(result.Result.Summary, "видимой части образа") {
+			if tc.name == "partial outfit" && !strings.Contains(result.Result.Summary, "Одежду видно не целиком") {
 				t.Fatalf("partial view qualifier missing: %+v", result.Result)
 			}
 			if tc.name == "mula" && result.Result.PrimaryCategory.Code != "mula" {

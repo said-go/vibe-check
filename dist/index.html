@@ -31,11 +31,11 @@
   <main>
     <section class="hero" id="start">
       <div class="hero-copy">
-        <p class="eyebrow">/// экспериментальный детектор стиля</p>
+        <p class="eyebrow">/// шуточная проверка образа</p>
         <h1>КАКОЙ У ТЕБЯ<br /><span class="outlined">СЕГОДНЯ ВАЙБ?</span></h1>
-        <p class="subtitle">Сделай кадр — AI рассмотрит детали одежды, а ВАЙБЧЕК покажет направление стиля и уровень образа.</p>
+        <p class="subtitle">Загрузи фото. Мы посмотрим, что на тебе, и выдадим вердикт. Можно смеяться.</p>
         <div class="hero-actions">
-          <button class="btn btn-primary" id="open-camera">Сканировать себя <span>↗</span></button>
+          <button class="btn btn-primary" id="open-camera">Проверить свой вайб <span>↗</span></button>
           <button class="btn btn-ghost" id="open-file" type="button">Загрузить фото</button>
           <input id="file-input" type="file" accept="image/*" hidden />
         </div>
@@ -60,12 +60,12 @@
     </section>
 
     <section class="scale-section">
-      <div class="section-title"><p class="eyebrow">направления стиля</p><h2>У КАЖДОГО СВОЙ ВАЙБ</h2></div>
+      <div class="section-title"><p class="eyebrow">что может выпасть</p><h2>У КАЖДОГО СВОЙ ВАЙБ</h2></div>
       <div class="scale-track">
-        <article><span class="rank">01</span><div class="emoji">🕸️</div><h3>НЕФОР</h3><p>Необычные детали</p></article>
-        <article><span class="rank">02</span><div class="emoji">🥀</div><h3>ГОТ</h3><p>Тёмные цвета</p></article>
-        <article><span class="rank">03</span><div class="emoji">😎</div><h3>CASUAL</h3><p>Просто и удобно</p></article>
-        <article class="hot"><span class="rank">04</span><div class="emoji">🪩</div><h3>СПОРТ-ШИК</h3><p>Спорт и стиль</p></article>
+        <article><span class="rank">01</span><div class="emoji">🕸️</div><h3>НЕФОР</h3><p>Вещи с характером</p></article>
+        <article><span class="rank">02</span><div class="emoji">🥀</div><h3>ГОТ</h3><p>Тёмное вышло на прогулку</p></article>
+        <article><span class="rank">03</span><div class="emoji">😎</div><h3>ЗДРАВЫЙ СТИЛЬ</h3><p>Вещи подружились</p></article>
+        <article class="hot"><span class="rank">04</span><div class="emoji">🪩</div><h3>СПОРТ-ШИК</h3><p>И гулять, и бегать</p></article>
       </div>
     </section>
 
@@ -127,7 +127,7 @@
       <div class="result-step" id="result-step" hidden>
         <div class="result-photo"><img id="result-image" alt="Ваше фото" /><div class="result-badge" id="result-score">—</div></div>
         <div class="result-copy"><p class="eyebrow">вердикт готов</p><h2 id="result-title" tabindex="-1"></h2><p class="result-category" id="result-category"></p><p id="result-description"></p>
-          <div class="stat-list"><div><span>ЦЕЛЬНОСТЬ</span><b id="style-stat">—</b></div><div><span>ОРИГИНАЛЬНОСТЬ</span><b id="energy-stat">—</b></div><div><span>ЦВЕТ</span><b id="aura-stat">—</b></div></div>
+          <div class="stat-list"><div><span>КАК СОЧЕТАЕТСЯ</span><b id="style-stat">—</b></div><div><span>НАСКОЛЬКО НЕОБЫЧНО</span><b id="energy-stat">—</b></div><div><span>ЦВЕТА</span><b id="aura-stat">—</b></div></div>
           <p id="result-recommendations"></p>
           <div class="modal-actions"><button class="btn btn-primary" id="again">Ещё раз</button><button class="btn btn-ghost" id="save-result">Сохранить в историю</button><button class="btn btn-ghost" id="download-card">Скачать карточку</button><button class="btn btn-ghost" id="share">Поделиться</button></div>
           <p class="share-note" id="share-note" aria-live="polite"></p>

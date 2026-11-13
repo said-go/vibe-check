@@ -86,7 +86,7 @@ func TestPartialViewStillReturnsOutfitResult(t *testing.T) {
 	if result.Score != 82 {
 		t.Fatalf("image quality must not lower outfit score: %d", result.Score)
 	}
-	if !strings.Contains(result.Summary, "видимой части образа") {
+	if !strings.Contains(result.Summary, "Одежду видно не целиком") {
 		t.Fatalf("limited view needs a visible qualifier: %q", result.Summary)
 	}
 }
@@ -164,5 +164,11 @@ func TestHairAndPiercingAreSupportingCues(t *testing.T) {
 	}
 	if withoutCues.PrimaryCategory.Code == "alternative" || withLongHair.PrimaryCategory.Code == "alternative" || withSeveralCues.PrimaryCategory.Code != "alternative" {
 		t.Fatalf("cues should support, not dictate: no=%q long=%q several=%q", withoutCues.PrimaryCategory.Code, withLongHair.PrimaryCategory.Code, withSeveralCues.PrimaryCategory.Code)
+	}
+	if !strings.Contains(withSeveralCues.Summary, "яркий цвет волос, пирсинг, длинные волосы") {
+		t.Fatalf("visible supporting cues missing from result: %q", withSeveralCues.Summary)
+	}
+	if strings.Contains(withoutCues.Summary, "пирсинг") {
+		t.Fatalf("invisible cue included in result: %q", withoutCues.Summary)
 	}
 }
