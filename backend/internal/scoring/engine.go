@@ -209,7 +209,7 @@ type levelDefinition struct {
 }
 
 func level(score int) levelDefinition {
-	levels := []levelDefinition{{0, "experimenter", "Экспериментатор"}, {50, "base", "Базовый вайб"}, {65, "healthy", "Здравый пацан"}, {80, "styler", "Стиляга"}, {92, "icon", "Икона вайба"}}
+	levels := []levelDefinition{{0, "experimenter", "Сегодня так задумано"}, {40, "base", "Уже можно выходить"}, {60, "healthy", "Здравый пацан"}, {75, "styler", "Стиляга"}, {90, "icon", "Остановите фотографа"}}
 	selected := levels[0]
 	for _, item := range levels {
 		if score >= item.min {

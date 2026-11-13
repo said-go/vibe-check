@@ -221,7 +221,10 @@ func TestRetro90sStyleDoesNotDependOnTraditionalSignal(t *testing.T) {
 }
 
 func TestHealthyLevelTitle(t *testing.T) {
-	if got := level(65).title; got != "Здравый пацан" {
+	if got := level(60).title; got != "Здравый пацан" {
 		t.Fatalf("level title = %q", got)
+	}
+	if got := level(75).title; got != "Стиляга" {
+		t.Fatalf("styler title = %q", got)
 	}
 }
