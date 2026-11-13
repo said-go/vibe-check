@@ -31,7 +31,8 @@ func TestPhotoToYandexToResult(t *testing.T) {
 		wantStatus string
 	}{
 		{"completed", visualFeatures, "completed"},
-		{"low confidence", strings.Replace(visualFeatures, `"confidence":86`, `"confidence":40`, 1), "low_confidence"},
+		{"partial outfit", strings.NewReplacer(`"outfit_visibility":90`, `"outfit_visibility":40`, `"image_quality":91`, `"image_quality":30`, `"confidence":86`, `"confidence":35`).Replace(visualFeatures), "completed"},
+		{"no visible clothing", strings.NewReplacer(`"outfit_visibility":90`, `"outfit_visibility":0`, `"confidence":86`, `"confidence":0`, `"outfit_coherence":88`, `"outfit_coherence":0`, `"color_harmony":82`, `"color_harmony":0`, `"originality":73`, `"originality":0`).Replace(visualFeatures), "low_confidence"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var providerCalls atomic.Int32
@@ -54,10 +55,7 @@ func TestPhotoToYandexToResult(t *testing.T) {
 						} `json:"content"`
 					} `json:"messages"`
 					ResponseFormat struct {
-						Type       string `json:"type"`
-						JSONSchema struct {
-							Strict bool `json:"strict"`
-						} `json:"json_schema"`
+						Type string `json:"type"`
 					} `json:"response_format"`
 				}
 				if err := json.NewDecoder(r.Body).Decode(&sent); err != nil {
@@ -65,7 +63,7 @@ func TestPhotoToYandexToResult(t *testing.T) {
 					w.WriteHeader(http.StatusBadRequest)
 					return
 				}
-				if sent.Model != "gpt://test-folder/qwen3.6-35b-a3b" || sent.ResponseFormat.Type != "json_schema" || !sent.ResponseFormat.JSONSchema.Strict {
+				if sent.Model != "gpt://test-folder/qwen3.6-35b-a3b" || sent.ResponseFormat.Type != "json_object" {
 					t.Errorf("model or response format is invalid: %+v", sent)
 				}
 				if len(sent.Messages) != 1 || len(sent.Messages[0].Content) != 2 || sent.Messages[0].Content[1].Type != "image_url" {
@@ -97,7 +95,8 @@ func TestPhotoToYandexToResult(t *testing.T) {
 			var result struct {
 				Status string `json:"status"`
 				Result struct {
-					Score           int `json:"score"`
+					Score           int    `json:"score"`
+					Summary         string `json:"summary"`
 					PrimaryCategory struct {
 						Code string `json:"code"`
 					} `json:"primary_category"`
@@ -112,8 +111,11 @@ func TestPhotoToYandexToResult(t *testing.T) {
 			if result.Status != tc.wantStatus || result.Privacy.ServerImageStored || providerCalls.Load() != 1 {
 				t.Fatalf("unexpected result %+v, provider calls %d", result, providerCalls.Load())
 			}
-			if tc.wantStatus == "completed" && (result.Result.Score != 84 || result.Result.PrimaryCategory.Code == "") {
+			if tc.wantStatus == "completed" && (result.Result.Score != 82 || result.Result.PrimaryCategory.Code == "") {
 				t.Fatalf("completed score or category invalid: %+v", result.Result)
+			}
+			if tc.name == "partial outfit" && !strings.Contains(result.Result.Summary, "видимой части образа") {
+				t.Fatalf("partial view qualifier missing: %+v", result.Result)
 			}
 			if tc.wantStatus == "low_confidence" && result.Result.PrimaryCategory.Code != "" {
 				t.Fatalf("low-confidence response exposed category: %+v", result.Result)

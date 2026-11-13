@@ -75,7 +75,7 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 		}
 		return ranked[i].Score > ranked[j].Score
 	})
-	overall := clamp(int(math.Round(float64(features.OutfitCoherence)*.35 + float64(features.ColorHarmony)*.20 + float64(features.Originality)*.20 + float64(features.ImageQuality)*.15 + float64(features.Confidence)*.10)))
+	overall := clamp(int(math.Round(float64(features.OutfitCoherence)*.45 + float64(features.ColorHarmony)*.30 + float64(features.Originality)*.25)))
 	primaryRule := e.ruleByCode(ranked[0].Code)
 	result := Result{
 		Status: "completed", PrimaryCategory: ranked[0], SecondaryCategory: ranked[1],
@@ -83,13 +83,22 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 		Metrics: Metrics{Coherence: features.OutfitCoherence, Originality: features.Originality, ColorHarmony: features.ColorHarmony},
 		Summary: primaryRule.Summary, Recommendations: recommendations(features),
 	}
+	if features.OutfitVisibility < 60 {
+		result.Summary += " Оценка по видимой части образа."
+	}
+	if features.ImageQuality < 55 {
+		result.Summary += " Точность ограничена качеством кадра."
+	}
+	if features.Confidence < 70 {
+		result.Summary += " Оценка предварительная."
+	}
 	if reason := features.LowConfidenceReason(); reason != "" {
 		result.Status = "low_confidence"
 		result.LowConfidenceReason = reason
 		result.PrimaryCategory = CategoryScore{}
 		result.SecondaryCategory = CategoryScore{}
 		result.Summary = "Не удалось уверенно определить стиль образа."
-		result.Recommendations = []string{"Сделай фото при хорошем освещении", "Покажи одежду целиком и оставь в кадре одного человека"}
+		result.Recommendations = []string{"Покажи хотя бы одну вещь одежды в кадре", "Оставь в кадре одного человека"}
 	}
 	return result, nil
 }

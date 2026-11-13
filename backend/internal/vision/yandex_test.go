@@ -24,9 +24,12 @@ func TestYandexAnalyzeRequestAndResult(t *testing.T) {
 			t.Errorf("project = %q", got)
 		}
 		var body struct {
-			Model    string `json:"model"`
-			Store    *bool  `json:"store"`
-			Messages []struct {
+			Model               string  `json:"model"`
+			Store               *bool   `json:"store"`
+			MaxCompletionTokens int     `json:"max_completion_tokens"`
+			ReasoningEffort     string  `json:"reasoning_effort"`
+			Temperature         float64 `json:"temperature"`
+			Messages            []struct {
 				Role    string `json:"role"`
 				Content []struct {
 					Type     string `json:"type"`
@@ -37,12 +40,7 @@ func TestYandexAnalyzeRequestAndResult(t *testing.T) {
 				} `json:"content"`
 			} `json:"messages"`
 			ResponseFormat struct {
-				Type       string `json:"type"`
-				JSONSchema struct {
-					Name   string         `json:"name"`
-					Strict bool           `json:"strict"`
-					Schema map[string]any `json:"schema"`
-				} `json:"json_schema"`
+				Type string `json:"type"`
 			} `json:"response_format"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -68,8 +66,8 @@ func TestYandexAnalyzeRequestAndResult(t *testing.T) {
 				t.Errorf("image = %+v", content[1])
 			}
 		}
-		if body.ResponseFormat.Type != "json_schema" || !body.ResponseFormat.JSONSchema.Strict || body.ResponseFormat.JSONSchema.Name == "" || body.ResponseFormat.JSONSchema.Schema["type"] != "object" {
-			t.Errorf("schema format = %+v", body.ResponseFormat)
+		if body.ResponseFormat.Type != "json_object" || body.MaxCompletionTokens != 1600 || body.ReasoningEffort != "low" || body.Temperature != 0.2 {
+			t.Errorf("format or generation settings = %+v", body)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": "stop", "message": map[string]any{"role": "assistant", "content": featureJSON}}}})
 	}))

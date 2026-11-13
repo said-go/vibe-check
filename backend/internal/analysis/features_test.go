@@ -33,6 +33,10 @@ func TestDecodeFeaturesRejectsUnknownAndOutOfRangeFields(t *testing.T) {
 	if _, err := DecodeFeatures(strings.NewReader(outOfRange)); err == nil {
 		t.Fatal("expected range error")
 	}
+	missing := strings.Replace(validJSON, `"person_count":1,`, "", 1)
+	if _, err := DecodeFeatures(strings.NewReader(missing)); err == nil {
+		t.Fatal("expected missing person_count error")
+	}
 }
 
 func TestLowConfidenceRules(t *testing.T) {
@@ -41,6 +45,24 @@ func TestLowConfidenceRules(t *testing.T) {
 		t.Fatalf("unexpected reason %q", reason)
 	}
 	features.OutfitVisibility = 40
+	features.ImageQuality = 30
+	features.Confidence = 35
+	features.PersonCount = 0
+	if reason := features.LowConfidenceReason(); reason != "" {
+		t.Fatalf("partial or lower-quality outfit should be accepted, got %q", reason)
+	}
+	features.PersonCount = 2
+	if reason := features.LowConfidenceReason(); reason != "" {
+		t.Fatalf("model person count should not reject visible clothing, got %q", reason)
+	}
+	features.OutfitVisibility = 0
+	if reason := features.LowConfidenceReason(); reason != "" {
+		t.Fatalf("a single low visibility estimate should not reject clothing, got %q", reason)
+	}
+	features.Confidence = 0
+	features.OutfitCoherence = 0
+	features.ColorHarmony = 0
+	features.Originality = 0
 	if reason := features.LowConfidenceReason(); reason != "outfit_visibility_too_low" {
 		t.Fatalf("unexpected reason %q", reason)
 	}

@@ -2,6 +2,7 @@ package scoring
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/said-go/vibe-check/backend/internal/analysis"
@@ -56,12 +57,36 @@ func TestGothIsAStyleNotALowLevel(t *testing.T) {
 
 func TestLowConfidenceDoesNotReturnCategory(t *testing.T) {
 	features := baseFeatures()
-	features.Confidence = 40
+	features.OutfitVisibility = 0
+	features.Confidence = 0
+	features.OutfitCoherence = 0
+	features.ColorHarmony = 0
+	features.Originality = 0
 	result, err := NewEngine().Evaluate(features)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result.Status != "low_confidence" || result.PrimaryCategory.Code != "" {
 		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
+func TestPartialViewStillReturnsOutfitResult(t *testing.T) {
+	features := baseFeatures()
+	features.OutfitVisibility = 40
+	features.ImageQuality = 30
+	features.Confidence = 35
+	result, err := NewEngine().Evaluate(features)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "completed" || result.PrimaryCategory.Code == "" {
+		t.Fatalf("partial outfit should produce a result: %+v", result)
+	}
+	if result.Score != 82 {
+		t.Fatalf("image quality must not lower outfit score: %d", result.Score)
+	}
+	if !strings.Contains(result.Summary, "видимой части образа") {
+		t.Fatalf("limited view needs a visible qualifier: %q", result.Summary)
 	}
 }

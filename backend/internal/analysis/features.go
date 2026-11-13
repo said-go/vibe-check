@@ -42,6 +42,24 @@ func DecodeFeatures(reader io.Reader) (VisualFeatures, error) {
 	if err != nil {
 		return VisualFeatures{}, fmt.Errorf("read AI response: %w", err)
 	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return VisualFeatures{}, fmt.Errorf("decode AI response: %w", err)
+	}
+	for _, name := range []string{"contract_version", "dominant_colors", "color_harmony", "darkness", "formality", "sportiness", "originality", "outfit_coherence", "accessory_intensity", "layering", "traditional_elements", "image_quality", "outfit_visibility", "confidence", "person_count", "subculture_signals"} {
+		if value, ok := fields[name]; !ok || string(value) == "null" {
+			return VisualFeatures{}, fmt.Errorf("decode AI response: missing %s", name)
+		}
+	}
+	var signals map[string]json.RawMessage
+	if err := json.Unmarshal(fields["subculture_signals"], &signals); err != nil {
+		return VisualFeatures{}, fmt.Errorf("decode AI response: subculture_signals: %w", err)
+	}
+	for _, name := range []string{"goth", "alternative", "streetwear", "classic", "sport_chic"} {
+		if value, ok := signals[name]; !ok || string(value) == "null" {
+			return VisualFeatures{}, fmt.Errorf("decode AI response: missing subculture_signals.%s", name)
+		}
+	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	var features VisualFeatures
@@ -87,14 +105,8 @@ func (f VisualFeatures) Validate() error {
 
 func (f VisualFeatures) LowConfidenceReason() string {
 	switch {
-	case f.PersonCount != 1:
-		return "single_person_required"
-	case f.ImageQuality < 55:
-		return "image_quality_too_low"
-	case f.OutfitVisibility < 60:
+	case f.OutfitVisibility == 0 && f.Confidence == 0 && f.OutfitCoherence == 0 && f.ColorHarmony == 0 && f.Originality == 0:
 		return "outfit_visibility_too_low"
-	case f.Confidence < 70:
-		return "ai_confidence_too_low"
 	default:
 		return ""
 	}

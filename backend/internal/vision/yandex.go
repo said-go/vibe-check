@@ -52,19 +52,17 @@ type yandexContent struct {
 }
 
 type yandexRequest struct {
-	Model    string `json:"model"`
-	Store    bool   `json:"store"`
-	Messages []struct {
+	Model               string  `json:"model"`
+	Store               bool    `json:"store"`
+	MaxCompletionTokens int     `json:"max_completion_tokens"`
+	ReasoningEffort     string  `json:"reasoning_effort"`
+	Temperature         float64 `json:"temperature"`
+	Messages            []struct {
 		Role    string          `json:"role"`
 		Content []yandexContent `json:"content"`
 	} `json:"messages"`
 	ResponseFormat struct {
-		Type       string `json:"type"`
-		JSONSchema struct {
-			Name   string         `json:"name"`
-			Strict bool           `json:"strict"`
-			Schema map[string]any `json:"schema"`
-		} `json:"json_schema"`
+		Type string `json:"type"`
 	} `json:"response_format"`
 }
 
@@ -87,6 +85,9 @@ func (p *Yandex) Analyze(ctx context.Context, sanitizedJPEG []byte) (analysis.Vi
 		return analysis.VisualFeatures{}, ErrInvalidResponse
 	}
 	requestBody := yandexRequest{Model: "gpt://" + p.folderID + "/" + p.model}
+	requestBody.MaxCompletionTokens = 1600
+	requestBody.ReasoningEffort = "low"
+	requestBody.Temperature = 0.2
 	requestBody.Messages = append(requestBody.Messages, struct {
 		Role    string          `json:"role"`
 		Content []yandexContent `json:"content"`
@@ -96,10 +97,7 @@ func (p *Yandex) Analyze(ctx context.Context, sanitizedJPEG []byte) (analysis.Vi
 			URL string `json:"url"`
 		}{URL: "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(sanitizedJPEG)}},
 	}})
-	requestBody.ResponseFormat.Type = "json_schema"
-	requestBody.ResponseFormat.JSONSchema.Name = "vibe_visual_features"
-	requestBody.ResponseFormat.JSONSchema.Strict = true
-	requestBody.ResponseFormat.JSONSchema.Schema = analysis.StrictSchema()
+	requestBody.ResponseFormat.Type = "json_object"
 	payload, err := json.Marshal(requestBody)
 	if err != nil {
 		return analysis.VisualFeatures{}, fmt.Errorf("marshal Yandex request: %w", err)
