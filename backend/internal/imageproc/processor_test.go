@@ -44,6 +44,9 @@ func TestSanitizeRemovesTrailingMetadata(t *testing.T) {
 }
 
 func TestSanitizeRejectsSmallAndUnsupportedImages(t *testing.T) {
+	if _, err := New().Sanitize(bytes.NewReader(jpegFixture(t, 128, 128, "")), "image/jpeg"); err != nil {
+		t.Fatalf("128px image should be accepted: %v", err)
+	}
 	if _, err := New().Sanitize(bytes.NewReader(jpegFixture(t, 100, 100, "")), "image/jpeg"); !errorsIs(err, ErrImageTooSmall) {
 		t.Fatalf("expected small image error, got %v", err)
 	}

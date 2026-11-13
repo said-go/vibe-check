@@ -259,7 +259,7 @@ func (s *Server) writeImageError(w http.ResponseWriter, r *http.Request, err err
 	case errors.Is(err, imageproc.ErrImageTooLarge):
 		s.writeError(w, r, http.StatusUnprocessableEntity, "image_dimensions_too_large", "Image dimensions are too large", false)
 	case errors.Is(err, imageproc.ErrImageTooSmall):
-		s.writeError(w, r, http.StatusUnprocessableEntity, "image_dimensions_too_small", "Image must be at least 320×320 pixels", false)
+		s.writeError(w, r, http.StatusUnprocessableEntity, "image_dimensions_too_small", "Image must be at least 128×128 pixels", false)
 	default:
 		s.writeError(w, r, http.StatusUnprocessableEntity, "invalid_image", "Image could not be decoded", false)
 	}

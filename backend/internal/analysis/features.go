@@ -34,6 +34,8 @@ type VisualFeatures struct {
 	OutfitVisibility    int               `json:"outfit_visibility"`
 	Confidence          int               `json:"confidence"`
 	PersonCount         int               `json:"person_count"`
+	SkullcapVisible     bool              `json:"skullcap_visible"`
+	BeardVisible        bool              `json:"beard_visible"`
 	Signals             SubcultureSignals `json:"subculture_signals"`
 }
 
@@ -79,8 +81,8 @@ func (f VisualFeatures) Validate() error {
 	if f.ContractVersion != ContractVersion {
 		return fmt.Errorf("unsupported contract_version %q", f.ContractVersion)
 	}
-	if len(f.DominantColors) == 0 || len(f.DominantColors) > 5 {
-		return errors.New("dominant_colors must contain 1 to 5 values")
+	if len(f.DominantColors) > 5 {
+		return errors.New("dominant_colors must contain at most 5 values")
 	}
 	if f.PersonCount < 0 || f.PersonCount > 10 {
 		return errors.New("person_count must be between 0 and 10")

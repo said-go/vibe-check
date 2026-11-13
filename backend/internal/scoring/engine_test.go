@@ -90,3 +90,32 @@ func TestPartialViewStillReturnsOutfitResult(t *testing.T) {
 		t.Fatalf("limited view needs a visible qualifier: %q", result.Summary)
 	}
 }
+
+func TestMulaRequiresVisibleSkullcapAndBeard(t *testing.T) {
+	engine := NewEngine()
+	for _, tc := range []struct {
+		name, want      string
+		skullcap, beard bool
+	}{
+		{"both", "mula", true, true},
+		{"skullcap only", "healthy_casual", true, false},
+		{"beard only", "healthy_casual", false, true},
+		{"neither", "healthy_casual", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			features := baseFeatures()
+			features.SkullcapVisible = tc.skullcap
+			features.BeardVisible = tc.beard
+			result, err := engine.Evaluate(features)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.PrimaryCategory.Code != tc.want {
+				t.Fatalf("category = %q, want %q", result.PrimaryCategory.Code, tc.want)
+			}
+			if tc.want == "mula" && (result.PrimaryCategory.Title != "Мула" || result.SecondaryCategory.Code != "healthy_casual") {
+				t.Fatalf("unexpected category details: %+v", result)
+			}
+		})
+	}
+}

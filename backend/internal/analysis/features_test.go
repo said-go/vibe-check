@@ -24,6 +24,22 @@ func TestDecodeFeatures(t *testing.T) {
 	}
 }
 
+func TestDecodeVisibleSkullcapAndBeard(t *testing.T) {
+	input := strings.Replace(validJSON, `"person_count":1,`, `"person_count":1,"skullcap_visible":true,"beard_visible":true,`, 1)
+	features, err := DecodeFeatures(strings.NewReader(input))
+	if err != nil || !features.SkullcapVisible || !features.BeardVisible {
+		t.Fatalf("features = %+v, error = %v", features, err)
+	}
+}
+
+func TestDecodeWithoutRecognizableClothingColor(t *testing.T) {
+	input := strings.Replace(validJSON, `["black","gray"]`, `[]`, 1)
+	features, err := DecodeFeatures(strings.NewReader(input))
+	if err != nil || len(features.DominantColors) != 0 {
+		t.Fatalf("features = %+v, error = %v", features, err)
+	}
+}
+
 func TestDecodeFeaturesRejectsUnknownAndOutOfRangeFields(t *testing.T) {
 	unknown := strings.Replace(validJSON, `"contract_version":"1.0.0"`, `"contract_version":"1.0.0","ethnicity":"unknown"`, 1)
 	if _, err := DecodeFeatures(strings.NewReader(unknown)); err == nil {

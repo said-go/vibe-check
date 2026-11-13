@@ -31,6 +31,7 @@ func TestPhotoToYandexToResult(t *testing.T) {
 		wantStatus string
 	}{
 		{"completed", visualFeatures, "completed"},
+		{"mula", strings.Replace(visualFeatures, `"person_count":1,`, `"person_count":1,"skullcap_visible":true,"beard_visible":true,`, 1), "completed"},
 		{"partial outfit", strings.NewReplacer(`"outfit_visibility":90`, `"outfit_visibility":40`, `"image_quality":91`, `"image_quality":30`, `"confidence":86`, `"confidence":35`).Replace(visualFeatures), "completed"},
 		{"no visible clothing", strings.NewReplacer(`"outfit_visibility":90`, `"outfit_visibility":0`, `"confidence":86`, `"confidence":0`, `"outfit_coherence":88`, `"outfit_coherence":0`, `"color_harmony":82`, `"color_harmony":0`, `"originality":73`, `"originality":0`).Replace(visualFeatures), "low_confidence"},
 	} {
@@ -116,6 +117,9 @@ func TestPhotoToYandexToResult(t *testing.T) {
 			}
 			if tc.name == "partial outfit" && !strings.Contains(result.Result.Summary, "видимой части образа") {
 				t.Fatalf("partial view qualifier missing: %+v", result.Result)
+			}
+			if tc.name == "mula" && result.Result.PrimaryCategory.Code != "mula" {
+				t.Fatalf("visible skullcap and beard should select mula: %+v", result.Result)
 			}
 			if tc.wantStatus == "low_confidence" && result.Result.PrimaryCategory.Code != "" {
 				t.Fatalf("low-confidence response exposed category: %+v", result.Result)

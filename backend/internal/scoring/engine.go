@@ -75,8 +75,14 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 		}
 		return ranked[i].Score > ranked[j].Score
 	})
+	if features.SkullcapVisible && features.BeardVisible {
+		ranked = append([]CategoryScore{{Code: "mula", Title: "Мула", Score: 100}}, ranked...)
+	}
 	overall := clamp(int(math.Round(float64(features.OutfitCoherence)*.45 + float64(features.ColorHarmony)*.30 + float64(features.Originality)*.25)))
 	primaryRule := e.ruleByCode(ranked[0].Code)
+	if ranked[0].Code == "mula" {
+		primaryRule.Summary = "Образ с тюбетейкой и бородой. Название категории описывает только видимые детали стиля."
+	}
 	result := Result{
 		Status: "completed", PrimaryCategory: ranked[0], SecondaryCategory: ranked[1],
 		Level: level(overall).code, LevelTitle: level(overall).title, Score: overall, Confidence: features.Confidence,

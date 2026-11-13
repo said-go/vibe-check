@@ -71,17 +71,37 @@ async function startCamera() {
   }
 }
 
-function useFile(file) {
+async function useFile(file) {
   if (!file) return;
   cancelRequest(); clearPhoto(); stopCamera();
-  if (!['image/jpeg', 'image/png'].includes(file.type) || file.size > 8 * 1024 * 1024) {
-    showError('Нужен JPEG или PNG размером до 8 МБ.', false); return;
+  if (file.size > 25 * 1024 * 1024) {
+    showError('Фото слишком большое. Выбери файл до 25 МБ.', false); return;
   }
   const generation = photoGeneration;
-  const reader = new FileReader();
-  reader.onload = () => { if (generation === photoGeneration && !modal.hidden) previewPhoto(file, reader.result); };
-  reader.onerror = () => { if (generation === photoGeneration && !modal.hidden) showError('Не удалось прочитать фото. Выбери другой файл.', false); };
-  reader.readAsDataURL(file);
+  const url = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    if (generation !== photoGeneration || modal.hidden) return;
+    if (Math.min(image.naturalWidth, image.naturalHeight) < 128) {
+      showError('Фото слишком маленькое. Нужен кадр хотя бы 128×128 пикселей.', false); return;
+    }
+    const scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
+    canvas.width = Math.round(image.naturalWidth * scale);
+    canvas.height = Math.round(image.naturalHeight * scale);
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .86));
+    if (generation !== photoGeneration || modal.hidden) return;
+    if (!blob || blob.size > 8 * 1024 * 1024) {
+      showError('Не удалось подготовить фото. Попробуй другой файл.', false); return;
+    }
+    previewPhoto(new File([blob], 'photo.jpg', { type: 'image/jpeg' }), canvas.toDataURL('image/jpeg', .86));
+  } catch {
+    if (generation === photoGeneration && !modal.hidden) showError('Браузер не смог открыть это фото. Попробуй JPEG, PNG или WebP.', false);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 function capture() {
   if (!video.videoWidth || !video.videoHeight) return;
@@ -108,7 +128,7 @@ function previewPhoto(file, src) {
 const errorMessages = {
   privacy_consent_required: 'Подтверди согласие на отправку фото для анализа.',
   unsupported_image_type: 'Подойдёт только JPEG или PNG. Выбери другое фото.',
-  image_dimensions_too_small: 'Фото слишком маленькое. Нужен кадр хотя бы 320×320 пикселей.',
+  image_dimensions_too_small: 'Фото слишком маленькое. Нужен кадр хотя бы 128×128 пикселей.',
   image_dimensions_too_large: 'Фото слишком большое. Сделай или выбери другой кадр.',
   invalid_image: 'Файл не удалось прочитать как фотографию.',
   image_too_large: 'Фото слишком большое. Выбери файл до 8 МБ.',

@@ -37,7 +37,7 @@
         <div class="hero-actions">
           <button class="btn btn-primary" id="open-camera">Сканировать себя <span>↗</span></button>
           <button class="btn btn-ghost" id="open-file" type="button">Загрузить фото</button>
-          <input id="file-input" type="file" accept="image/jpeg,image/png" hidden />
+          <input id="file-input" type="file" accept="image/*" hidden />
         </div>
         <p class="microcopy">Фото отправляется AI-сервису только после твоего согласия · без регистрации</p>
         <p class="api-status" id="api-status" role="status" aria-live="polite">Проверяем доступность AI-анализа…</p>
@@ -95,7 +95,7 @@
         <div class="modal-actions">
           <button class="btn btn-primary" id="capture" disabled>Сделать кадр</button>
           <button class="btn btn-ghost" id="modal-open-file" type="button">Выбрать файл</button>
-          <input id="modal-file" type="file" accept="image/jpeg,image/png" hidden />
+          <input id="modal-file" type="file" accept="image/*" hidden />
         </div>
       </div>
 

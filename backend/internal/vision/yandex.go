@@ -85,7 +85,7 @@ func (p *Yandex) Analyze(ctx context.Context, sanitizedJPEG []byte) (analysis.Vi
 		return analysis.VisualFeatures{}, ErrInvalidResponse
 	}
 	requestBody := yandexRequest{Model: "gpt://" + p.folderID + "/" + p.model}
-	requestBody.MaxCompletionTokens = 1600
+	requestBody.MaxCompletionTokens = 2400
 	requestBody.ReasoningEffort = "low"
 	requestBody.Temperature = 0.2
 	requestBody.Messages = append(requestBody.Messages, struct {

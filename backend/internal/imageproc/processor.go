@@ -33,7 +33,7 @@ type Processor struct {
 }
 
 func New() Processor {
-	return Processor{MinDimension: 320, MaxPixels: 20_000_000, JPEGQuality: 88}
+	return Processor{MinDimension: 128, MaxPixels: 20_000_000, JPEGQuality: 88}
 }
 
 func (p Processor) Sanitize(reader io.Reader, declaredType string) (SanitizedImage, error) {
