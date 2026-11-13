@@ -26,7 +26,7 @@ PWA передаёт `Idempotency-Key`, который остаётся преж
 | `HTTP_ADDRESS` | `:8080` |
 | `FRONTEND_DIR` | `../dist` |
 | `HTTP_READ_TIMEOUT` | `30s` |
-| `HTTP_WRITE_TIMEOUT` | `60s` |
+| `HTTP_WRITE_TIMEOUT` | `150s` |
 | `HTTP_MAX_REQUEST_BYTES` | `10485760` |
 | `ANALYSES_PER_HOUR` | `30` на экземпляр |
 | `ANALYSES_PER_CLIENT_MINUTE` | `3` на сетевой адрес |
@@ -36,7 +36,7 @@ PWA передаёт `Idempotency-Key`, который остаётся преж
 | `YANDEX_FOLDER_ID` | нет |
 | `YANDEX_MODEL` | `qwen3.6-35b-a3b` |
 | `YANDEX_BASE_URL` | `https://ai.api.cloud.yandex.net/v1` |
-| `YANDEX_TIMEOUT` | `45s` |
+| `YANDEX_TIMEOUT` | `90s` |
 
 Альтернативный провайдер `AI_PROVIDER=openai` использует `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BASE_URL` и `OPENAI_TIMEOUT`. Секреты держите в окружении хостинга, не в Git.
 

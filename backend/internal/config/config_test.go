@@ -23,6 +23,9 @@ func TestValidateRejectsInvalidConfiguration(t *testing.T) {
 func TestLoadYandexDefaultsAndProductionCredentials(t *testing.T) {
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("AI_PROVIDER", "yandex")
+	t.Setenv("HTTP_READ_TIMEOUT", "")
+	t.Setenv("HTTP_WRITE_TIMEOUT", "")
+	t.Setenv("YANDEX_TIMEOUT", "")
 	t.Setenv("YANDEX_API_KEY", "test-key")
 	t.Setenv("YANDEX_FOLDER_ID", "test-folder")
 	t.Setenv("YANDEX_MODEL", "")
@@ -33,6 +36,9 @@ func TestLoadYandexDefaultsAndProductionCredentials(t *testing.T) {
 	}
 	if cfg.YandexModel != "qwen3.6-35b-a3b" || cfg.YandexBaseURL != "https://ai.api.cloud.yandex.net/v1" {
 		t.Fatalf("unexpected Yandex defaults: model=%q endpoint=%q", cfg.YandexModel, cfg.YandexBaseURL)
+	}
+	if cfg.ReadTimeout != 30*time.Second || cfg.YandexTimeout != 90*time.Second || cfg.WriteTimeout != 150*time.Second {
+		t.Fatalf("inconsistent request timeouts: read=%s AI=%s write=%s", cfg.ReadTimeout, cfg.YandexTimeout, cfg.WriteTimeout)
 	}
 	t.Setenv("YANDEX_FOLDER_ID", "")
 	if _, err := Load(); err == nil {
