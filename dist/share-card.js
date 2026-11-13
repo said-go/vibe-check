@@ -40,7 +40,7 @@
     ctx.fillStyle = BLUE; ctx.fillRect(80, 310, 920, 450);
     ctx.fillStyle = ACID; ctx.beginPath(); ctx.arc(830, 525, 128, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.font = '800 100px Unbounded, Arial, sans-serif';
-    ctx.fillText(String(record.score), 830, 560);
+    ctx.fillText(record.score == null ? '★' : String(record.score), 830, 560);
     ctx.textAlign = 'left'; ctx.fillStyle = '#ffffff'; ctx.font = '800 38px Manrope, Arial, sans-serif';
     wrap(ctx, record.levelTitle.toUpperCase(), 130, 445, 535, 58, 2);
     ctx.font = '700 30px Manrope, Arial, sans-serif';
@@ -52,7 +52,9 @@
       ['ОРИГИНАЛЬНОСТЬ', record.metrics.originality],
       ['ЦВЕТ', record.metrics.colorHarmony]
     ];
-    metrics.forEach(([label, value], index) => {
+    if (record.score == null) {
+      ctx.fillText('ЗАРАНЕЕ ЗАДАННЫЙ ОТВЕТ', 80, 890);
+    } else metrics.forEach(([label, value], index) => {
       const x = 80 + index * 310;
       ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.strokeRect(x, 810, 290, 160);
       ctx.fillText(label, x + 20, 860);

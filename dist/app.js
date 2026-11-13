@@ -6,6 +6,7 @@ const ctx = canvas.getContext('2d', { willReadFrequently: true });
 let stream = null;
 let currentImage = '';
 let currentFile = null;
+let currentPreset = null;
 let analysisKey = '';
 let currentRecord = null;
 let currentCardBlob = null;
@@ -19,6 +20,23 @@ let focusBeforeModal = null;
 let availabilityGeneration = 0;
 const API_BASE = (window.VIBE_API_BASE_URL || '/api').replace(/\/$/, '');
 const MAX_UPLOAD_BYTES = 2.5 * 1024 * 1024;
+// Only SHA-256 fingerprints and the owner's requested text are included here; no photos are bundled.
+const PHOTO_PRESETS = Object.freeze({
+  f1c8dc5f938b95675b54e169d8139c4166f61e2b1fe807114fcfd44ba64d7624: {
+    title: 'Чушпан', summary: 'Самому не стыдно было присылать такое фото!'
+  },
+  '4b4941958438cac8fb68040995e00f70172f527b6db0c75ecae818f7c6238173': {
+    title: 'Пупсик', summary: 'Мягкий человек с доброй душой, но очень наивный'
+  }
+});
+const NORMAL_CONSENT_DESCRIPTION = 'После согласия фото будет отправлено на наш сервер. Он удалит метаданные и передаст очищенную копию в Yandex AI Studio для анализа. Наш сервер не сохраняет фото.';
+const NORMAL_CONSENT_LABEL = 'Согласен отправить фото в Yandex AI Studio для анализа';
+async function presetForFile(file) {
+  if (!crypto.subtle) return null;
+  const bytes = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+  const fingerprint = [...new Uint8Array(bytes)].map(value => value.toString(16).padStart(2, '0')).join('');
+  return PHOTO_PRESETS[fingerprint] || null;
+}
 const steps = ['capture-step', 'consent-step', 'analyzing-step', 'error-step', 'result-step'];
 
 async function compressedJPEG() {
@@ -51,7 +69,7 @@ function showStep(id) {
   heading.focus();
 }
 function cancelRequest() { requestGeneration++; activeRequest?.abort(); activeRequest = null; }
-function clearPhoto() { photoGeneration++; currentFile = null; currentImage = ''; analysisKey = ''; currentRecord = null; currentCardBlob = null; $('#consent-image').removeAttribute('src'); $('#analysis-image').removeAttribute('src'); $('#result-image').removeAttribute('src'); canvas.width = 0; canvas.height = 0; }
+function clearPhoto() { photoGeneration++; currentFile = null; currentPreset = null; currentImage = ''; analysisKey = ''; currentRecord = null; currentCardBlob = null; $('#consent-image').removeAttribute('src'); $('#analysis-image').removeAttribute('src'); $('#result-image').removeAttribute('src'); canvas.width = 0; canvas.height = 0; }
 
 function openModal(withCamera = true, returnFocus = document.activeElement) {
   focusBeforeModal = returnFocus;
@@ -122,9 +140,10 @@ async function useFile(file) {
     if (!blob) {
       showError('Не удалось достаточно сжать фото. Попробуй другой кадр.', false); return;
     }
+    const preset = await presetForFile(file).catch(() => null);
     const src = await blobDataURL(blob);
     if (generation !== photoGeneration || modal.hidden) return;
-    previewPhoto(new File([blob], 'photo.jpg', { type: 'image/jpeg' }), src);
+    previewPhoto(new File([blob], 'photo.jpg', { type: 'image/jpeg' }), src, preset);
   } catch {
     if (generation === photoGeneration && !modal.hidden) showError('Браузер не смог открыть это фото. Попробуй JPEG, PNG или WebP.', false);
   } finally {
@@ -156,8 +175,11 @@ async function capture() {
     }
   }
 }
-function previewPhoto(file, src) {
-  stopCamera(); cancelRequest(); currentFile = file; currentImage = src; analysisKey = crypto.randomUUID();
+function previewPhoto(file, src, preset = null) {
+  stopCamera(); cancelRequest(); currentFile = file; currentPreset = preset; currentImage = src; analysisKey = crypto.randomUUID();
+  $('#consent-description').textContent = preset ? 'Это фото совпало с заранее заданным примером. Ответ покажем здесь; фото никуда не отправим.' : NORMAL_CONSENT_DESCRIPTION;
+  $('#consent-label-text').textContent = preset ? 'Показать заранее заданный ответ' : NORMAL_CONSENT_LABEL;
+  $('#start-analysis').textContent = preset ? 'Показать результат' : 'Узнать вайб';
   $('#consent-image').src = src; $('#privacy-consent').checked = false; $('#start-analysis').disabled = true;
   $('#consent-error').textContent = ''; showStep('consent-step');
 }
@@ -222,6 +244,15 @@ async function refreshAvailability() {
 }
 async function analyze() {
   if (!currentFile || !$('#privacy-consent').checked) return;
+  if (currentPreset) {
+    const preset = currentPreset;
+    showResult({
+      status: 'completed', score: null, level_title: 'Особый вердикт',
+      primary_category: { title: preset.title }, summary: preset.summary,
+      metrics: { coherence: null, originality: null, color_harmony: null }, recommendations: []
+    }, analysisKey);
+    return;
+  }
   if (!navigator.onLine) { showError('Для нового AI-анализа нужен интернет.', true); return; }
   cancelRequest(); const generation = requestGeneration; const controller = new AbortController(); activeRequest = controller;
   showStep('analyzing-step'); $('#analysis-image').src = currentImage;
@@ -260,6 +291,7 @@ async function analyze() {
   } finally { if (generation === requestGeneration) activeRequest = null; }
 }
 function showResult(result, analysisId) {
+  const preset = result.score == null;
   currentRecord = window.VIBE_HISTORY.prepare(analysisId, result);
   currentCardBlob = null;
   const record = currentRecord;
@@ -269,19 +301,22 @@ function showResult(result, analysisId) {
   $('#save-result').disabled = false;
   $('#save-result').textContent = 'Сохранить в историю';
   $('#result-image').src = currentImage;
-  $('#result-score').textContent = result.score;
-  $('#result-title').textContent = result.level_title;
-  $('#result-category').textContent = `Стиль: ${result.primary_category.title}`;
+  $('#result-score').textContent = preset ? '★' : result.score;
+  $('#result-title').textContent = preset ? result.primary_category.title : result.level_title;
+  $('#result-category').textContent = preset ? 'Особый вердикт' : `Стиль: ${result.primary_category.title}`;
   $('#result-description').textContent = result.summary;
-  $('#style-stat').textContent = `${result.metrics.coherence}%`;
-  $('#energy-stat').textContent = `${result.metrics.originality}%`;
-  $('#aura-stat').textContent = `${result.metrics.color_harmony}%`;
-  $('#result-recommendations').textContent = Array.isArray(result.recommendations) ? result.recommendations.join(' · ') : '';
+  $('#result-stats').hidden = preset;
+  $('#style-stat').textContent = preset ? '—' : `${result.metrics.coherence}%`;
+  $('#energy-stat').textContent = preset ? '—' : `${result.metrics.originality}%`;
+  $('#aura-stat').textContent = preset ? '—' : `${result.metrics.color_harmony}%`;
+  $('#result-recommendations').textContent = preset ? '' : Array.isArray(result.recommendations) ? result.recommendations.join(' · ') : '';
   showStep('result-step');
 }
 
 function resultText(record) {
-  return `Мой результат в ВАЙБЧЕК: ${record.levelTitle}, стиль ${record.category} — ${record.score}/100. А ты кто сегодня?`;
+  return record.score == null
+    ? `Мой особый вердикт в ВАЙБЧЕК: ${record.category}. ${record.summary}`
+    : `Мой результат в ВАЙБЧЕК: ${record.levelTitle}, стиль ${record.category} — ${record.score}/100. А ты кто сегодня?`;
 }
 
 function historyCard(record) {
@@ -293,7 +328,7 @@ function historyCard(record) {
   date.dateTime = new Date(record.createdAt).toISOString();
   date.textContent = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium' }).format(record.createdAt);
   const score = document.createElement('strong');
-  score.textContent = `${record.score}/100`;
+  score.textContent = record.score == null ? '★' : `${record.score}/100`;
   top.append(date, score);
   const title = document.createElement('h3');
   title.textContent = record.levelTitle;

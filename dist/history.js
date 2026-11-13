@@ -42,7 +42,7 @@
 
   function compact(id, result) {
     const text = (value, max = 180) => String(value || '').slice(0, max);
-    const score = value => Math.max(0, Math.min(100, Number.isFinite(value) ? Math.round(value) : 0));
+    const score = value => value == null ? null : Math.max(0, Math.min(100, Number.isFinite(value) ? Math.round(value) : 0));
     return {
       id: text(id, 80), createdAt: Date.now(),
       score: score(result.score), levelTitle: text(result.level_title, 80),

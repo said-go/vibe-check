@@ -11,6 +11,7 @@
 .scale-track{grid-template-columns:repeat(3,1fr)}
 .scale-track article:nth-child(3){border-right:0}
 .scale-track article:nth-child(-n+3){border-bottom:1px solid #555}
+.stat-list[hidden]{display:none}
 @media(max-width:850px){.scale-track{grid-template-columns:repeat(2,1fr)}.scale-track article:nth-child(3){border-right:1px solid #555}.scale-track article:nth-child(2n){border-right:0}.scale-track article:nth-child(-n+4){border-bottom:1px solid #555}}
 @media(max-width:520px){.scale-track{grid-template-columns:1fr}.scale-track article{border-right:0!important}}
 

@@ -106,8 +106,8 @@
         <div class="consent-layout">
           <img id="consent-image" alt="Предпросмотр выбранного фото" />
           <div class="consent-copy">
-            <p>После согласия фото будет отправлено на наш сервер. Он удалит метаданные и передаст очищенную копию в Yandex AI Studio для анализа. Наш сервер не сохраняет фото.</p>
-            <label class="consent-label"><input type="checkbox" id="privacy-consent" /> <span>Согласен отправить фото в Yandex AI Studio для анализа</span></label>
+            <p id="consent-description">После согласия фото будет отправлено на наш сервер. Он удалит метаданные и передаст очищенную копию в Yandex AI Studio для анализа. Наш сервер не сохраняет фото.</p>
+            <label class="consent-label"><input type="checkbox" id="privacy-consent" /> <span id="consent-label-text">Согласен отправить фото в Yandex AI Studio для анализа</span></label>
             <p class="camera-error" id="consent-error" role="alert"></p>
             <div class="modal-actions"><button class="btn btn-primary" id="start-analysis" disabled>Узнать вайб</button><button class="btn btn-ghost" id="choose-again">Другое фото</button></div>
           </div>
@@ -129,7 +129,7 @@
       <div class="result-step" id="result-step" hidden>
         <div class="result-photo"><img id="result-image" alt="Ваше фото" /><div class="result-badge" id="result-score">—</div></div>
         <div class="result-copy"><p class="eyebrow">вердикт готов</p><h2 id="result-title" tabindex="-1"></h2><p class="result-category" id="result-category"></p><p id="result-description"></p>
-          <div class="stat-list"><div><span>КАК СОЧЕТАЕТСЯ</span><b id="style-stat">—</b></div><div><span>НАСКОЛЬКО НЕОБЫЧНО</span><b id="energy-stat">—</b></div><div><span>ЦВЕТА</span><b id="aura-stat">—</b></div></div>
+          <div class="stat-list" id="result-stats"><div><span>КАК СОЧЕТАЕТСЯ</span><b id="style-stat">—</b></div><div><span>НАСКОЛЬКО НЕОБЫЧНО</span><b id="energy-stat">—</b></div><div><span>ЦВЕТА</span><b id="aura-stat">—</b></div></div>
           <p id="result-recommendations"></p>
           <div class="modal-actions"><button class="btn btn-primary" id="again">Ещё раз</button><button class="btn btn-ghost" id="save-result">Сохранить в историю</button><button class="btn btn-ghost" id="download-card">Скачать карточку</button><button class="btn btn-ghost" id="share">Поделиться</button></div>
           <p class="share-note" id="share-note" aria-live="polite"></p>
