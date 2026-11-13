@@ -20,13 +20,19 @@ let focusBeforeModal = null;
 let availabilityGeneration = 0;
 const API_BASE = (window.VIBE_API_BASE_URL || '/api').replace(/\/$/, '');
 const MAX_UPLOAD_BYTES = 2.5 * 1024 * 1024;
-// Only SHA-256 fingerprints and the owner's requested text are included here; no photos are bundled.
+// Only SHA-256 fingerprints and owner-edited entertainment results are bundled; no photos are bundled.
 const PHOTO_PRESETS = Object.freeze({
   f1c8dc5f938b95675b54e169d8139c4166f61e2b1fe807114fcfd44ba64d7624: {
-    title: 'Чушпан', summary: 'Самому не стыдно было присылать такое фото!'
+    title: 'Чушпан', summary: 'Самому не стыдно было присылать такое фото!',
+    score: 58, levelTitle: 'Уже можно выходить',
+    metrics: { coherence: 55, originality: 60, colorHarmony: 62 },
+    recommendations: ['На следующем фото дай одежде чуть больше места в кадре']
   },
   '4b4941958438cac8fb68040995e00f70172f527b6db0c75ecae818f7c6238173': {
-    title: 'Пупсик', summary: 'Мягкий человек с доброй душой, но очень наивный'
+    title: 'Пупсик', summary: 'Мягкий человек с доброй душой, но очень наивный',
+    score: 78, levelTitle: 'Стиляга',
+    metrics: { coherence: 78, originality: 72, colorHarmony: 82 },
+    recommendations: ['Один яркий аксессуар — и образ заиграет ещё сильнее']
   }
 });
 async function presetForFile(file) {
@@ -241,10 +247,21 @@ async function analyze() {
   if (!currentFile || !$('#privacy-consent').checked) return;
   if (currentPreset) {
     const preset = currentPreset;
+    cancelRequest(); const generation = requestGeneration;
+    showStep('analyzing-step'); $('#analysis-image').src = currentImage;
+    $('#analysis-status').textContent = 'Смотрим детали образа';
+    $('#progress-bar').style.width = '65%';
+    await new Promise(resolve => setTimeout(resolve, 800));
+    if (generation !== requestGeneration || modal.hidden || currentPreset !== preset) return;
+    $('#progress-bar').style.width = '100%';
     showResult({
-      status: 'completed', score: null, level_title: 'Вайб найден',
+      status: 'completed', score: preset.score, level_title: preset.levelTitle,
       primary_category: { title: preset.title }, summary: preset.summary,
-      metrics: { coherence: null, originality: null, color_harmony: null }, recommendations: []
+      metrics: {
+        coherence: preset.metrics.coherence,
+        originality: preset.metrics.originality,
+        color_harmony: preset.metrics.colorHarmony
+      }, recommendations: preset.recommendations
     }, analysisKey);
     return;
   }
@@ -286,7 +303,6 @@ async function analyze() {
   } finally { if (generation === requestGeneration) activeRequest = null; }
 }
 function showResult(result, analysisId) {
-  const preset = result.score == null;
   currentRecord = window.VIBE_HISTORY.prepare(analysisId, result);
   currentCardBlob = null;
   const record = currentRecord;
@@ -296,16 +312,16 @@ function showResult(result, analysisId) {
   $('#save-result').disabled = false;
   $('#save-result').textContent = 'Сохранить в историю';
   $('#result-image').src = currentImage;
-  $('#result-score').hidden = preset;
-  $('#result-score').textContent = preset ? '' : result.score;
-  $('#result-title').textContent = preset ? result.primary_category.title : result.level_title;
-  $('#result-category').textContent = preset ? 'Вердикт по фото' : `Стиль: ${result.primary_category.title}`;
+  $('#result-score').hidden = false;
+  $('#result-score').textContent = result.score;
+  $('#result-title').textContent = result.level_title;
+  $('#result-category').textContent = `Стиль: ${result.primary_category.title}`;
   $('#result-description').textContent = result.summary;
-  $('#result-stats').hidden = preset;
-  $('#style-stat').textContent = preset ? '—' : `${result.metrics.coherence}%`;
-  $('#energy-stat').textContent = preset ? '—' : `${result.metrics.originality}%`;
-  $('#aura-stat').textContent = preset ? '—' : `${result.metrics.color_harmony}%`;
-  $('#result-recommendations').textContent = preset ? '' : Array.isArray(result.recommendations) ? result.recommendations.join(' · ') : '';
+  $('#result-stats').hidden = false;
+  $('#style-stat').textContent = `${result.metrics.coherence}%`;
+  $('#energy-stat').textContent = `${result.metrics.originality}%`;
+  $('#aura-stat').textContent = `${result.metrics.color_harmony}%`;
+  $('#result-recommendations').textContent = Array.isArray(result.recommendations) ? result.recommendations.join(' · ') : '';
   showStep('result-step');
 }
 
