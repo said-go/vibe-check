@@ -119,6 +119,12 @@ const errorMessages = {
   ai_unavailable: 'AI-сервис сейчас недоступен. Повтори попытку позже.',
   invalid_ai_response: 'Ответ AI не удалось проверить. Попробуй ещё раз.'
 };
+const lowConfidenceMessages = {
+  single_person_required: 'AI не увидел в кадре ровно одного человека. Сфотографируйся один, чтобы одежда была хорошо видна.',
+  image_quality_too_low: 'Качество кадра недостаточно для анализа. Сделай более чёткое фото при хорошем освещении.',
+  outfit_visibility_too_low: 'Одежда видна недостаточно хорошо. Отойди от камеры и покажи образ целиком.',
+  ai_confidence_too_low: 'AI не смог уверенно распознать детали одежды. Попробуй другой ракурс и ровный свет.'
+};
 function showError(message, retryable = true) {
   $('#error-title').textContent = 'НЕ ПОЛУЧИЛОСЬ';
   $('#error-description').textContent = message;
@@ -186,7 +192,10 @@ async function analyze() {
     }
     if (!data.result || !['completed', 'low_confidence'].includes(data.status)) throw new Error('invalid_response');
     $('#progress-bar').style.width = '100%';
-    if (data.status === 'low_confidence') { showError('Не удалось уверенно определить образ. Сделай другое фото при хорошем освещении, чтобы одежда была видна целиком.', false); return; }
+    if (data.status === 'low_confidence') {
+      showError(lowConfidenceMessages[data.result.low_confidence_reason] || 'Не удалось уверенно определить образ. Попробуй другое фото при хорошем освещении.', false);
+      return;
+    }
     showResult(data.result, data.analysis_id);
   } catch (error) {
     if (error.name !== 'AbortError' && generation === requestGeneration && !modal.hidden) {

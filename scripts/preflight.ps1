@@ -20,6 +20,17 @@ function Run-Checked([string]$Executable, [string[]]$Arguments) {
     }
 }
 
+function Test-DockerDaemon {
+    $previousPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & docker info --format '{{.Server.Version}}' 2>$null | Out-Null
+        return $LASTEXITCODE -eq 0
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
+}
+
 Assert-Tool 'go'
 Assert-Tool 'node'
 
@@ -38,8 +49,7 @@ Run-Checked 'node' @('--check', (Join-Path $projectRoot 'dist/sw.js'))
 
 if ($BuildImage) {
     Assert-Tool 'docker'
-    & docker info --format '{{.Server.Version}}' 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) {
+    if (-not (Test-DockerDaemon)) {
         throw 'Docker daemon is unavailable; start Docker before building the image.'
     }
     Push-Location -LiteralPath $projectRoot
@@ -54,8 +64,7 @@ $dockerInstalled = [bool](Get-Command docker -ErrorAction SilentlyContinue)
 $ycInstalled = [bool](Get-Command yc -ErrorAction SilentlyContinue)
 $dockerDaemonReady = $false
 if ($dockerInstalled) {
-    & docker info --format '{{.Server.Version}}' 2>$null | Out-Null
-    $dockerDaemonReady = $LASTEXITCODE -eq 0
+    $dockerDaemonReady = Test-DockerDaemon
 }
 Write-Host "Local checks passed. Docker installed: $dockerInstalled; Docker daemon ready: $dockerDaemonReady; Yandex Cloud CLI installed: $ycInstalled."
 Write-Host 'No cloud resources were created, and no secret values were read.'
