@@ -47,7 +47,7 @@ func NewEngine() *Engine {
 	return &Engine{rules: []rule{
 		{Code: "urban_classic", Title: "Собранный", Summary: "Всё аккуратно. Выглядишь так, будто у тебя встреча. Даже если встреча — с шаурмой.", Weights: map[featureName]float64{"formality": .30, "coherence": .25, "classic": .25, "harmony": .15, "accessories": .05}},
 		{Code: "healthy_casual", Title: "Здравый стиль", Summary: "Вещи подружились. Можно выходить без совета семейного чата.", Weights: map[featureName]float64{"coherence": .35, "harmony": .25, "sportiness": .15, "classic": .15, "originality": .10}},
-		{Code: "sport_chic", Title: "Спорт-шик", Summary: "И за кофе, и на тренировку. Образ готов к обоим планам.", Weights: map[featureName]float64{"sport_chic": .35, "sportiness": .30, "coherence": .20, "originality": .15}},
+		{Code: "sport_chic", Title: "Спортик", Summary: "И за кофе, и на тренировку. Образ готов к обоим планам.", Weights: map[featureName]float64{"sport_chic": .35, "sportiness": .30, "coherence": .20, "originality": .15}},
 		{Code: "streetwear", Title: "Уличный стиль", Summary: "Свободная одежда и заметные детали. Город — твой подиум, маршрутка — первый ряд.", Weights: map[featureName]float64{"streetwear": .45, "originality": .25, "sportiness": .15, "accessories": .15}},
 		{Code: "alternative", Title: "Нефор", Summary: "Одежда с характером. У деталей явно свои планы.", Weights: map[featureName]float64{"alternative": .45, "originality": .20, "accessories": .10, "layering": .05, "unnatural_hair_color": .10, "piercing": .05, "hair_below_ears": .03, "hair_over_eyes": .02}},
 		{Code: "goth", Title: "Гот", Summary: "Тёмные вещи взяли слово. Похоже, спорить с ними бесполезно.", Weights: map[featureName]float64{"goth": .45, "darkness": .30, "coherence": .15, "layering": .10}},
