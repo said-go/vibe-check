@@ -85,8 +85,8 @@ func (p *Yandex) Analyze(ctx context.Context, sanitizedJPEG []byte) (analysis.Vi
 		return analysis.VisualFeatures{}, ErrInvalidResponse
 	}
 	requestBody := yandexRequest{Model: "gpt://" + p.folderID + "/" + p.model}
-	requestBody.MaxCompletionTokens = 2400
-	requestBody.ReasoningEffort = "low"
+	requestBody.MaxCompletionTokens = 4096
+	requestBody.ReasoningEffort = "none"
 	requestBody.Temperature = 0.2
 	requestBody.Messages = append(requestBody.Messages, struct {
 		Role    string          `json:"role"`
@@ -138,7 +138,7 @@ func (p *Yandex) Analyze(ctx context.Context, sanitizedJPEG []byte) (analysis.Vi
 	if choice.FinishReason != "stop" || choice.Message.Role != "assistant" || strings.TrimSpace(choice.Message.Content) == "" {
 		return analysis.VisualFeatures{}, ErrInvalidResponse
 	}
-	features, err := analysis.DecodeFeatures(strings.NewReader(choice.Message.Content))
+	features, err := analysis.DecodeYandexFeatures(strings.NewReader(choice.Message.Content))
 	if err != nil {
 		return analysis.VisualFeatures{}, fmt.Errorf("%w: %v", ErrInvalidResponse, err)
 	}

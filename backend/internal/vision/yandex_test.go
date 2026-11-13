@@ -66,7 +66,7 @@ func TestYandexAnalyzeRequestAndResult(t *testing.T) {
 				t.Errorf("image = %+v", content[1])
 			}
 		}
-		if body.ResponseFormat.Type != "json_object" || body.MaxCompletionTokens != 2400 || body.ReasoningEffort != "low" || body.Temperature != 0.2 {
+		if body.ResponseFormat.Type != "json_object" || body.MaxCompletionTokens != 4096 || body.ReasoningEffort != "none" || body.Temperature != 0.2 {
 			t.Errorf("format or generation settings = %+v", body)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": "stop", "message": map[string]any{"role": "assistant", "content": featureJSON}}}})
