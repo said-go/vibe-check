@@ -44,13 +44,14 @@ func TestLoadPortFallbackAndRateLimits(t *testing.T) {
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("HTTP_ADDRESS", "")
 	t.Setenv("PORT", "8089")
+	t.Setenv("HTTP_READ_TIMEOUT", "")
 	t.Setenv("ANALYSES_PER_HOUR", "40")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Address != ":8089" || cfg.AnalysesPerHour != 40 {
-		t.Fatalf("unexpected config: address=%q perHour=%d", cfg.Address, cfg.AnalysesPerHour)
+	if cfg.Address != ":8089" || cfg.AnalysesPerHour != 40 || cfg.ReadTimeout != 30*time.Second {
+		t.Fatalf("unexpected config: address=%q perHour=%d readTimeout=%s", cfg.Address, cfg.AnalysesPerHour, cfg.ReadTimeout)
 	}
 	t.Setenv("HTTP_ADDRESS", "127.0.0.1:8090")
 	cfg, err = Load()

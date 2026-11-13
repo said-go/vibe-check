@@ -18,7 +18,31 @@ let deferredInstallPrompt = null;
 let focusBeforeModal = null;
 let availabilityGeneration = 0;
 const API_BASE = (window.VIBE_API_BASE_URL || '/api').replace(/\/$/, '');
+const MAX_UPLOAD_BYTES = 2.5 * 1024 * 1024;
 const steps = ['capture-step', 'consent-step', 'analyzing-step', 'error-step', 'result-step'];
+
+async function compressedJPEG() {
+  const output = document.createElement('canvas');
+  for (const scale of [1, .75, .56]) {
+    output.width = Math.max(1, Math.round(canvas.width * scale));
+    output.height = Math.max(1, Math.round(canvas.height * scale));
+    output.getContext('2d').drawImage(canvas, 0, 0, output.width, output.height);
+    for (const quality of [.86, .7, .54, .4]) {
+      const blob = await new Promise(resolve => output.toBlob(resolve, 'image/jpeg', quality));
+      if (blob?.type === 'image/jpeg' && blob.size <= MAX_UPLOAD_BYTES) return blob;
+    }
+  }
+  return null;
+}
+
+function blobDataURL(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
 
 function showStep(id) {
   steps.forEach(step => { $(`#${step}`).hidden = step !== id; });
@@ -27,7 +51,7 @@ function showStep(id) {
   heading.focus();
 }
 function cancelRequest() { requestGeneration++; activeRequest?.abort(); activeRequest = null; }
-function clearPhoto() { photoGeneration++; currentFile = null; currentImage = ''; analysisKey = ''; currentRecord = null; currentCardBlob = null; $('#consent-image').removeAttribute('src'); $('#analysis-image').removeAttribute('src'); $('#result-image').removeAttribute('src'); }
+function clearPhoto() { photoGeneration++; currentFile = null; currentImage = ''; analysisKey = ''; currentRecord = null; currentCardBlob = null; $('#consent-image').removeAttribute('src'); $('#analysis-image').removeAttribute('src'); $('#result-image').removeAttribute('src'); canvas.width = 0; canvas.height = 0; }
 
 function openModal(withCamera = true, returnFocus = document.activeElement) {
   focusBeforeModal = returnFocus;
@@ -90,35 +114,47 @@ async function useFile(file) {
     const scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
     canvas.width = Math.round(image.naturalWidth * scale);
     canvas.height = Math.round(image.naturalHeight * scale);
+    ctx.fillStyle = '#f5f1ea';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .86));
+    const blob = await compressedJPEG();
     if (generation !== photoGeneration || modal.hidden) return;
-    if (!blob || blob.size > 8 * 1024 * 1024) {
-      showError('Не удалось подготовить фото. Попробуй другой файл.', false); return;
+    if (!blob) {
+      showError('Не удалось достаточно сжать фото. Попробуй другой кадр.', false); return;
     }
-    previewPhoto(new File([blob], 'photo.jpg', { type: 'image/jpeg' }), canvas.toDataURL('image/jpeg', .86));
+    const src = await blobDataURL(blob);
+    if (generation !== photoGeneration || modal.hidden) return;
+    previewPhoto(new File([blob], 'photo.jpg', { type: 'image/jpeg' }), src);
   } catch {
     if (generation === photoGeneration && !modal.hidden) showError('Браузер не смог открыть это фото. Попробуй JPEG, PNG или WebP.', false);
   } finally {
     URL.revokeObjectURL(url);
   }
 }
-function capture() {
+async function capture() {
   if (!video.videoWidth || !video.videoHeight) return;
   $('#capture').disabled = true;
   const generation = ++photoGeneration;
   const scale = Math.min(1, 1600 / Math.max(video.videoWidth, video.videoHeight));
   canvas.width = Math.round(video.videoWidth * scale); canvas.height = Math.round(video.videoHeight * scale);
   ctx.save(); ctx.translate(canvas.width, 0); ctx.scale(-1, 1); ctx.drawImage(video, 0, 0, canvas.width, canvas.height); ctx.restore();
-  canvas.toBlob(blob => {
+  try {
+    const blob = await compressedJPEG();
     if (generation !== photoGeneration || modal.hidden) return;
     if (!blob) {
       $('#capture').disabled = false;
-      $('#camera-error').textContent = 'Не удалось сохранить кадр. Попробуй ещё раз.';
+      $('#camera-error').textContent = 'Не удалось достаточно сжать кадр. Попробуй ещё раз.';
       return;
     }
-    previewPhoto(new File([blob], 'camera.jpg', { type: 'image/jpeg' }), canvas.toDataURL('image/jpeg', .85));
-  }, 'image/jpeg', .85);
+    const src = await blobDataURL(blob);
+    if (generation !== photoGeneration || modal.hidden) return;
+    previewPhoto(new File([blob], 'camera.jpg', { type: 'image/jpeg' }), src);
+  } catch {
+    if (generation === photoGeneration && !modal.hidden) {
+      $('#capture').disabled = false;
+      $('#camera-error').textContent = 'Не удалось сохранить кадр. Попробуй ещё раз.';
+    }
+  }
 }
 function previewPhoto(file, src) {
   stopCamera(); cancelRequest(); currentFile = file; currentImage = src; analysisKey = crypto.randomUUID();
@@ -131,7 +167,7 @@ const errorMessages = {
   image_dimensions_too_small: 'Фото слишком маленькое. Нужен кадр хотя бы 128×128 пикселей.',
   image_dimensions_too_large: 'Фото слишком большое. Сделай или выбери другой кадр.',
   invalid_image: 'Файл не удалось прочитать как фотографию.',
-  image_too_large: 'Фото слишком большое. Выбери файл до 8 МБ.',
+  image_too_large: 'Не удалось отправить фото. Выбери файл поменьше или попробуй другой кадр.',
   rate_limited: 'Слишком много запросов подряд. Подожди немного и попробуй снова.',
   idempotency_conflict: 'Это уже другое фото. Выбери его заново и повтори анализ.',
   invalid_idempotency_key: 'Не удалось подготовить запрос. Выбери фото заново.',
@@ -155,7 +191,7 @@ async function analysisReady(signal) {
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener('abort', abort, { once: true });
-  const timeout = setTimeout(abort, 5000);
+  const timeout = setTimeout(abort, 15000);
   try {
     const response = await fetch(`${API_BASE}/readyz?check=${Date.now()}`, {
       headers: { Accept: 'application/json' }, cache: 'no-store', signal: controller.signal

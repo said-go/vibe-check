@@ -33,6 +33,25 @@ func TestOpenAIAnalyzeUsesImageAndStrictSchema(t *testing.T) {
 		if !strings.Contains(text, `"strict":true`) {
 			t.Error("strict schema missing")
 		}
+		format := body["text"].(map[string]any)["format"].(map[string]any)
+		schema := format["schema"].(map[string]any)
+		properties := schema["properties"].(map[string]any)
+		required := schema["required"].([]any)
+		for _, field := range []string{"skullcap_visible", "beard_visible"} {
+			if _, ok := properties[field]; !ok {
+				t.Errorf("strict schema missing %s property", field)
+			}
+			found := false
+			for _, item := range required {
+				if item == field {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("strict schema missing %s requirement", field)
+			}
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"status": "completed", "output": []any{map[string]any{"type": "message", "content": []any{map[string]any{"type": "output_text", "text": featureJSON}}}}})
 	}))

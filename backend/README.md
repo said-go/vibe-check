@@ -25,7 +25,7 @@ PWA передаёт `Idempotency-Key`, который остаётся преж
 | `APP_ENV` | `development` |
 | `HTTP_ADDRESS` | `:8080` |
 | `FRONTEND_DIR` | `../dist` |
-| `HTTP_READ_TIMEOUT` | `10s` |
+| `HTTP_READ_TIMEOUT` | `30s` |
 | `HTTP_WRITE_TIMEOUT` | `60s` |
 | `HTTP_MAX_REQUEST_BYTES` | `10485760` |
 | `ANALYSES_PER_HOUR` | `30` на экземпляр |

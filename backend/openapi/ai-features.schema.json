@@ -12,7 +12,7 @@
   ],
   "properties": {
     "contract_version": { "const": "1.0.0" },
-    "dominant_colors": { "type": "array", "minItems": 1, "maxItems": 5, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 32 } },
+    "dominant_colors": { "type": "array", "maxItems": 5, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 32 } },
     "color_harmony": { "$ref": "#/$defs/score" },
     "darkness": { "$ref": "#/$defs/score" },
     "formality": { "$ref": "#/$defs/score" },
@@ -26,6 +26,8 @@
     "outfit_visibility": { "$ref": "#/$defs/score" },
     "confidence": { "$ref": "#/$defs/score" },
     "person_count": { "type": "integer", "minimum": 0, "maximum": 10 },
+    "skullcap_visible": { "type": "boolean", "description": "True only when a skullcap is clearly visible on the main subject." },
+    "beard_visible": { "type": "boolean", "description": "True only when a beard is visible on the same subject. These are visual cues, not a religious or occupational inference." },
     "subculture_signals": {
       "type": "object",
       "additionalProperties": false,

@@ -17,6 +17,9 @@ if (-not $env:YANDEX_API_KEY -or -not $env:YANDEX_FOLDER_ID) {
 
 Push-Location -LiteralPath $backendRoot
 try {
+    $listenAddress = if ($env:HTTP_ADDRESS) { $env:HTTP_ADDRESS } elseif ($env:PORT) { ":$env:PORT" } else { ':8080' }
+    $browserAddress = if ($listenAddress.StartsWith(':')) { "localhost$listenAddress" } elseif ($listenAddress.StartsWith('0.0.0.0:')) { $listenAddress -replace '^0\.0\.0\.0:', 'localhost:' } else { $listenAddress }
+    Write-Host "ВАЙБЧЕК запускается: http://$browserAddress/ . Сервер работает до Ctrl+C."
     & go run ./cmd/api
     if ($LASTEXITCODE -ne 0) { throw "go run failed with exit code $LASTEXITCODE" }
 } finally {

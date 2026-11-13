@@ -4,14 +4,14 @@
 
 ## В работе
 
-- [#6 — VC-09: интеграция Vision AI](https://github.com/said-go/vibe-check/issues/6) — адаптер Yandex AI Studio готов; нужен живой запрос с ключом и ID каталога.
-- [#9 — VC-12: вертикальный AI-сценарий](https://github.com/said-go/vibe-check/issues/9) — PWA и Go API связаны локально; требуется размещение backend с HTTPS и секретами.
+Локальный основной сценарий реализован и проверен; текущая работа сосредоточена на надёжности фото и подготовке размещения.
 
 ## Готово к работе
 
 
 ## Бэклог
 
+- [#21 — VC-21: рабочий PWA с AI в Yandex Cloud](https://github.com/said-go/vibe-check/issues/21) — Container Registry, Lockbox, Serverless Container, бюджет, HTTPS и проверка на телефоне.
 - [#13 — VC-17: региональное тестирование](https://github.com/said-go/vibe-check/issues/13)
 - [#14 — VC-18: контексты оценки](https://github.com/said-go/vibe-check/issues/14)
 - [#15 — VC-19: аккаунт и синхронизация](https://github.com/said-go/vibe-check/issues/15)
@@ -19,6 +19,8 @@
 
 ## Готово
 
+- [x] [#6 — VC-09: интеграция Vision AI](https://github.com/said-go/vibe-check/issues/6) — живой запрос Yandex с фото дал валидные признаки.
+- [x] [#9 — VC-12: вертикальный AI-сценарий](https://github.com/said-go/vibe-check/issues/9) — загрузка фото, AI, scoring и результат проверены локально.
 - [x] [#11 — VC-15: локальная история](https://github.com/said-go/vibe-check/issues/11) — результаты хранятся только на устройстве, без фото; доступны удаление и полная очистка.
 - [x] [#12 — VC-16: карточка для публикации](https://github.com/said-go/vibe-check/issues/12) — PNG без фото скачивается, Share API отправляет изображение при поддержке браузером.
 - [x] [#10 — VC-14: автотесты MVP](https://github.com/said-go/vibe-check/issues/10) — тесты с mock Yandex и GitHub CI прошли, включая race detector и сборку Docker.

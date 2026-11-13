@@ -34,7 +34,7 @@ $secret = "environment-variable=YANDEX_API_KEY,id=$SecretId,version-id=$SecretVe
 Write-Host "Commit: $commit"
 Write-Host "Image: $image"
 Write-Host "Target container: $ContainerId in folder $FolderId"
-Write-Host 'Revision: 1 core, 1GB RAM, 60s timeout, 2 concurrent requests, 1 instance per zone.'
+Write-Host 'Revision: 1 core, 1GB RAM, 150s timeout, 2 concurrent requests, 1 instance per zone.'
 Write-Host 'Secret value is read by the container from Lockbox; this script only receives resource IDs.'
 
 if (-not $Apply) {
@@ -55,7 +55,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Target container is unavailable.' }
 
 Push-Location -LiteralPath $projectRoot
 try {
-    & docker build -t $image .
+    & docker build --platform linux/amd64 -t $image .
     if ($LASTEXITCODE -ne 0) { throw 'Docker build failed.' }
     & docker push $image
     if ($LASTEXITCODE -ne 0) { throw 'Docker push failed.' }
@@ -63,6 +63,6 @@ try {
     Pop-Location
 }
 
-& yc serverless container revision deploy --container-id $ContainerId --folder-id $FolderId --image $image --cores 1 --memory 1GB --execution-timeout 60s --concurrency 2 --zone-instances-limit 1 --service-account-id $ServiceAccountId --environment $environment --secret $secret
+& yc serverless container revision deploy --container-id $ContainerId --folder-id $FolderId --image $image --cores 1 --memory 1GB --execution-timeout 150s --concurrency 2 --zone-instances-limit 1 --service-account-id $ServiceAccountId --environment $environment --secret $secret
 if ($LASTEXITCODE -ne 0) { throw 'Revision deploy failed.' }
 Write-Host 'Revision deployed. Public access was not changed; run smoke-yandex.ps1 against the HTTPS URL after configuring access.'

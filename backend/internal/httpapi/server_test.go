@@ -112,6 +112,9 @@ func TestAnalyzeImageEndToEnd(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status %d: %s", response.Code, response.Body.String())
 	}
+	if got := response.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("analysis response cache policy = %q", got)
+	}
 	if !strings.Contains(response.Body.String(), `"server_image_stored":false`) {
 		t.Fatalf("privacy flag missing: %s", response.Body.String())
 	}
@@ -268,6 +271,17 @@ func TestAnalyzeRejectsDuplicateAndMismatchedImages(t *testing.T) {
 				t.Fatalf("status %d, body %s", response.Code, response.Body.String())
 			}
 		})
+	}
+}
+
+func TestAnalyzeAcceptsGenericPhotoContentType(t *testing.T) {
+	features, _ := analysis.DecodeFeatures(strings.NewReader(validPayload))
+	calls := 0
+	handler := New(slog.New(slog.NewTextHandler(io.Discard, nil)), 10<<20, fakeVision{features: features, calls: &calls})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, makeImageRequest(t, []string{"true"}, [][]byte{imageFixture(t)}, "application/octet-stream"))
+	if response.Code != http.StatusOK || calls != 1 {
+		t.Fatalf("status=%d calls=%d body=%s", response.Code, calls, response.Body.String())
 	}
 }
 

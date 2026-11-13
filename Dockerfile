@@ -6,7 +6,7 @@ COPY backend/internal ./internal
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /vibe-api ./cmd/api
 
 FROM alpine:3.21
-RUN addgroup -S app && adduser -S -G app app
+RUN apk add --no-cache ca-certificates && addgroup -S app && adduser -S -G app app
 WORKDIR /app
 COPY --from=build /vibe-api /app/vibe-api
 COPY dist /app/dist

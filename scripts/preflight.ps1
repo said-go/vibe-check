@@ -54,7 +54,7 @@ if ($BuildImage) {
     }
     Push-Location -LiteralPath $projectRoot
     try {
-        Run-Checked 'docker' @('build', '--tag', 'vibe-check:preflight', '.')
+        Run-Checked 'docker' @('build', '--platform', 'linux/amd64', '--tag', 'vibe-check:preflight', '.')
     } finally {
         Pop-Location
     }

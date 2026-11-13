@@ -36,7 +36,7 @@ func Load() (Config, error) {
 	cfg := Config{
 		Environment:             env("APP_ENV", "development"),
 		Address:                 env("HTTP_ADDRESS", ":"+env("PORT", "8080")),
-		ReadTimeout:             duration("HTTP_READ_TIMEOUT", 10*time.Second),
+		ReadTimeout:             duration("HTTP_READ_TIMEOUT", 30*time.Second),
 		WriteTimeout:            duration("HTTP_WRITE_TIMEOUT", 120*time.Second),
 		ShutdownTimeout:         duration("HTTP_SHUTDOWN_TIMEOUT", 10*time.Second),
 		MaxRequestBytes:         integer("HTTP_MAX_REQUEST_BYTES", 10<<20),

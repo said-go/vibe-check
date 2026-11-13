@@ -23,7 +23,7 @@ person_count считай по людям, у которых видна хотя
 image_quality отражает резкость и освещение, confidence — уверенность в признаках видимой одежды.
 Для каждого числового поля используй шкалу 0–100. Ноль означает отсутствие признака, а не значение по умолчанию.
 На чётком фото с видимой кофтой или футболкой image_quality, outfit_visibility и confidence должны быть больше нуля.
-skullcap_visible = true только если на голове отчётливо видна тюбетейка; обычная кепка, шапка и капюшон не подходят. beard_visible = true только если видна борода. Это признаки внешнего вида, а не религии, профессии или личности.
+skullcap_visible = true только если на голове главного человека отчётливо видна тюбетейка; обычная кепка, шапка и капюшон не подходят. beard_visible = true только если у этого же человека видна борода. Если признак неразличим, верни false. Не объединяй признаки разных людей. Это признаки внешнего вида, а не религии, профессии или личности.
 Верни только JSON-объект со всеми полями: contract_version (строка "1.0.0"), dominant_colors (массив цветов одежды), color_harmony, darkness, formality, sportiness, originality, outfit_coherence, accessory_intensity, layering, traditional_elements, image_quality, outfit_visibility, confidence (целые числа 0–100), person_count (целое число), skullcap_visible и beard_visible (логические значения), subculture_signals (объект с целыми полями goth, alternative, streetwear, classic, sport_chic). Не добавляй другие поля.
 Верни только указанный JSON-объект.`
 

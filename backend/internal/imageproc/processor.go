@@ -10,6 +10,7 @@ import (
 	"image/jpeg"
 	_ "image/png"
 	"io"
+	"mime"
 	"net/http"
 )
 
@@ -48,8 +49,11 @@ func (p Processor) Sanitize(reader io.Reader, declaredType string) (SanitizedIma
 	if detected != "image/jpeg" && detected != "image/png" {
 		return SanitizedImage{}, ErrUnsupportedType
 	}
-	if declaredType != "" && declaredType != detected {
-		return SanitizedImage{}, ErrUnsupportedType
+	if declaredType != "" {
+		mediaType, _, err := mime.ParseMediaType(declaredType)
+		if err != nil || mediaType != detected && mediaType != "application/octet-stream" && !(detected == "image/jpeg" && mediaType == "image/jpg") {
+			return SanitizedImage{}, ErrUnsupportedType
+		}
 	}
 
 	config, _, err := image.DecodeConfig(bytes.NewReader(data))

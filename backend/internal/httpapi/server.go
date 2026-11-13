@@ -266,6 +266,13 @@ func (s *Server) writeImageError(w http.ResponseWriter, r *http.Request, err err
 }
 
 func (s *Server) writeVisionError(w http.ResponseWriter, r *http.Request, err error) {
+	kind := "invalid_response"
+	if errors.Is(err, vision.ErrUnavailable) {
+		kind = "provider_unavailable"
+	} else if errors.Is(err, vision.ErrRejected) {
+		kind = "provider_rejected"
+	}
+	s.logger.Warn("vision_analysis_failed", "request_id", requestIDFrom(r), "kind", kind)
 	switch {
 	case errors.Is(err, vision.ErrUnavailable):
 		s.writeError(w, r, http.StatusServiceUnavailable, "ai_unavailable", "AI analysis is temporarily unavailable", true)
@@ -289,6 +296,7 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, status int, 
 func writeJSON(w http.ResponseWriter, status int, value any) { writeJSONStatus(w, status, value) }
 func writeJSONStatus(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
 }

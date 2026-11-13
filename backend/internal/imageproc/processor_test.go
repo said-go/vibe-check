@@ -55,5 +55,17 @@ func TestSanitizeRejectsSmallAndUnsupportedImages(t *testing.T) {
 	}
 }
 
+func TestSanitizeAcceptsGenericOrParameterizedImageType(t *testing.T) {
+	input := jpegFixture(t, 128, 128, "")
+	for _, declared := range []string{"", "application/octet-stream", "image/jpeg; charset=binary", "image/jpg"} {
+		if _, err := New().Sanitize(bytes.NewReader(input), declared); err != nil {
+			t.Fatalf("declared type %q: %v", declared, err)
+		}
+	}
+	if _, err := New().Sanitize(bytes.NewReader(input), "image/png"); !errors.Is(err, ErrUnsupportedType) {
+		t.Fatalf("conflicting MIME type should be rejected: %v", err)
+	}
+}
+
 func httpContentType(data []byte) string { return http.DetectContentType(data) }
 func errorsIs(err, target error) bool    { return errors.Is(err, target) }

@@ -96,7 +96,7 @@ components:
       required: [contract_version, dominant_colors, color_harmony, darkness, formality, sportiness, originality, outfit_coherence, accessory_intensity, layering, traditional_elements, image_quality, outfit_visibility, confidence, person_count, subculture_signals]
       properties:
         contract_version: { type: string, const: 1.0.0 }
-        dominant_colors: { type: array, minItems: 1, maxItems: 5, items: { type: string } }
+        dominant_colors: { type: array, maxItems: 5, items: { type: string } }
         color_harmony: { $ref: '#/components/schemas/Score' }
         darkness: { $ref: '#/components/schemas/Score' }
         formality: { $ref: '#/components/schemas/Score' }
@@ -110,6 +110,8 @@ components:
         outfit_visibility: { $ref: '#/components/schemas/Score' }
         confidence: { $ref: '#/components/schemas/Score' }
         person_count: { type: integer, minimum: 0, maximum: 10 }
+        skullcap_visible: { type: boolean, description: 'True only for a clearly visible skullcap on the main subject.' }
+        beard_visible: { type: boolean, description: 'True only for a beard on the same subject; no religious or occupational inference.' }
         subculture_signals: { $ref: '#/components/schemas/Signals' }
     CategoryScore:
       type: object

@@ -8,7 +8,7 @@ func StrictSchema() map[string]any {
 		"required": []string{
 			"contract_version", "dominant_colors", "color_harmony", "darkness", "formality",
 			"sportiness", "originality", "outfit_coherence", "accessory_intensity", "layering",
-			"traditional_elements", "image_quality", "outfit_visibility", "confidence", "person_count", "subculture_signals",
+			"traditional_elements", "image_quality", "outfit_visibility", "confidence", "person_count", "skullcap_visible", "beard_visible", "subculture_signals",
 		},
 		"properties": map[string]any{
 			"contract_version": map[string]any{"type": "string", "const": ContractVersion},
