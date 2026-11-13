@@ -35,9 +35,12 @@
     try { return await work(db); } finally { db.close(); }
   }
 
+  const displayCategory = title => title === 'Спорт-шик' ? 'Спортик' : title;
+
   const list = () => withDatabase(async db => {
     const rows = await transaction(db, 'readonly', store => store.getAll());
-    return rows.sort((a, b) => b.createdAt - a.createdAt);
+    return rows.map(row => ({ ...row, category: displayCategory(row.category) }))
+      .sort((a, b) => b.createdAt - a.createdAt);
   });
 
   function compact(id, result) {
@@ -46,7 +49,7 @@
     return {
       id: text(id, 80), createdAt: Date.now(),
       score: score(result.score), levelTitle: text(result.level_title, 80),
-      category: text(result.primary_category?.title, 80),
+      category: displayCategory(text(result.primary_category?.title, 80)),
       summary: text(result.summary, 240),
       metrics: {
         coherence: score(result.metrics?.coherence), originality: score(result.metrics?.originality),
