@@ -8,7 +8,7 @@ func StrictSchema() map[string]any {
 		"required": []string{
 			"contract_version", "dominant_colors", "color_harmony", "darkness", "formality",
 			"sportiness", "originality", "outfit_coherence", "accessory_intensity", "layering",
-			"traditional_elements", "image_quality", "outfit_visibility", "confidence", "person_count", "skullcap_visible", "beard_visible", "unnatural_hair_color_visible", "piercing_visible", "hair_below_ears_visible", "hair_over_eyes_visible", "subculture_signals",
+			"traditional_elements", "image_quality", "outfit_visibility", "confidence", "person_count", "skullcap_visible", "beard_visible", "unnatural_hair_color_visible", "piercing_visible", "hair_below_ears_visible", "hair_over_eyes_visible", "playful_grimace_visible", "subculture_signals",
 		},
 		"properties": map[string]any{
 			"contract_version": map[string]any{"type": "string", "const": ContractVersion},
@@ -24,10 +24,11 @@ func StrictSchema() map[string]any {
 			"piercing_visible":             map[string]any{"type": "boolean"},
 			"hair_below_ears_visible":      map[string]any{"type": "boolean"},
 			"hair_over_eyes_visible":       map[string]any{"type": "boolean"},
+			"playful_grimace_visible":      map[string]any{"type": "boolean"},
 			"subculture_signals": map[string]any{
 				"type": "object", "additionalProperties": false,
-				"required":   []string{"goth", "alternative", "streetwear", "classic", "sport_chic"},
-				"properties": map[string]any{"goth": score, "alternative": score, "streetwear": score, "classic": score, "sport_chic": score},
+				"required":   []string{"goth", "alternative", "streetwear", "classic", "sport_chic", "retro_90s"},
+				"properties": map[string]any{"goth": score, "alternative": score, "streetwear": score, "classic": score, "sport_chic": score, "retro_90s": score},
 			},
 		},
 	}

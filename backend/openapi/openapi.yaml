@@ -90,6 +90,7 @@ components:
         streetwear: { $ref: '#/components/schemas/Score' }
         classic: { $ref: '#/components/schemas/Score' }
         sport_chic: { $ref: '#/components/schemas/Score' }
+        retro_90s: { $ref: '#/components/schemas/Score' }
     VisualFeatures:
       type: object
       additionalProperties: false
@@ -116,6 +117,7 @@ components:
         piercing_visible: { type: boolean, description: 'Clearly visible piercing on the main subject; excludes a single ordinary earring.' }
         hair_below_ears_visible: { type: boolean, description: 'Hair visibly extends below the ears; weak cue alone.' }
         hair_over_eyes_visible: { type: boolean, description: 'Hair visibly covers one or both eyes; weak cue alone.' }
+        playful_grimace_visible: { type: boolean, description: 'Clearly deliberate playful grimace, not an ordinary smile or blink.' }
         subculture_signals: { $ref: '#/components/schemas/Signals' }
     CategoryScore:
       type: object

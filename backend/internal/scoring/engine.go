@@ -51,7 +51,7 @@ func NewEngine() *Engine {
 		{Code: "streetwear", Title: "Уличный стиль", Summary: "Свободная одежда и заметные детали. Город — твой подиум, маршрутка — первый ряд.", Weights: map[featureName]float64{"streetwear": .45, "originality": .25, "sportiness": .15, "accessories": .15}},
 		{Code: "alternative", Title: "Нефор", Summary: "Одежда с характером. У деталей явно свои планы.", Weights: map[featureName]float64{"alternative": .45, "originality": .20, "accessories": .10, "layering": .05, "unnatural_hair_color": .10, "piercing": .05, "hair_below_ears": .03, "hair_over_eyes": .02}},
 		{Code: "goth", Title: "Гот", Summary: "Тёмные вещи взяли слово. Похоже, спорить с ними бесполезно.", Weights: map[featureName]float64{"goth": .45, "darkness": .30, "coherence": .15, "layering": .10}},
-		{Code: "traditional_accent", Title: "С традицией", Summary: "Традиционная деталь держит образ. Остальные вещи ей подыгрывают.", Weights: map[featureName]float64{"traditional": .55, "coherence": .25, "harmony": .20}},
+		{Code: "retro_90s", Title: "Бандит 90-х", Summary: "В кадре вайб старой видеокассеты: ретро-вещи и серьёзный выход за хлебом.", Weights: map[featureName]float64{"retro_90s": .70, "sportiness": .15, "accessories": .10, "originality": .05}},
 	}}
 }
 
@@ -79,10 +79,16 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 	if features.SkullcapVisible && features.BeardVisible {
 		ranked = append([]CategoryScore{{Code: "mula", Title: "Мула", Score: 100}}, ranked...)
 	}
+	if features.PlayfulGrimace {
+		ranked = append([]CategoryScore{{Code: "clown", Title: "Клоун", Score: 100}}, ranked...)
+	}
 	overall := clamp(int(math.Round(float64(features.OutfitCoherence)*.45 + float64(features.ColorHarmony)*.30 + float64(features.Originality)*.25)))
 	primaryRule := e.ruleByCode(ranked[0].Code)
 	if ranked[0].Code == "mula" {
 		primaryRule.Summary = "На фото видны тюбетейка и борода. Про человека по одежде не гадаем."
+	}
+	if ranked[0].Code == "clown" {
+		primaryRule.Summary = "Пытались оценить стиль, но гримаса перехватила эфир. Сегодня главный аксессуар — чувство юмора."
 	}
 	result := Result{
 		Status: "completed", PrimaryCategory: ranked[0], SecondaryCategory: ranked[1],
@@ -190,8 +196,8 @@ func value(f analysis.VisualFeatures, name featureName) int {
 		return f.Signals.Goth
 	case "darkness":
 		return f.Darkness
-	case "traditional":
-		return f.TraditionalElements
+	case "retro_90s":
+		return f.Signals.Retro90s
 	default:
 		return 0
 	}
@@ -203,7 +209,7 @@ type levelDefinition struct {
 }
 
 func level(score int) levelDefinition {
-	levels := []levelDefinition{{0, "experimenter", "Экспериментатор"}, {50, "base", "Базовый вайб"}, {65, "healthy", "Здравый образ"}, {80, "styler", "Стиляга"}, {92, "icon", "Икона вайба"}}
+	levels := []levelDefinition{{0, "experimenter", "Экспериментатор"}, {50, "base", "Базовый вайб"}, {65, "healthy", "Здравый пацан"}, {80, "styler", "Стиляга"}, {92, "icon", "Икона вайба"}}
 	selected := levels[0]
 	for _, item := range levels {
 		if score >= item.min {

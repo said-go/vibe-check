@@ -172,3 +172,56 @@ func TestHairAndPiercingAreSupportingCues(t *testing.T) {
 		t.Fatalf("invisible cue included in result: %q", withoutCues.Summary)
 	}
 }
+
+func TestPlayfulGrimaceWinsOnlyWhenVisible(t *testing.T) {
+	features := baseFeatures()
+	engine := NewEngine()
+	without, err := engine.Evaluate(features)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if without.PrimaryCategory.Code == "clown" {
+		t.Fatal("ordinary expression selected clown")
+	}
+	features.PlayfulGrimace = true
+	with, err := engine.Evaluate(features)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if with.PrimaryCategory.Code != "clown" || with.SecondaryCategory.Code != without.PrimaryCategory.Code {
+		t.Fatalf("grimace priority is wrong: %+v", with)
+	}
+	if with.Score != without.Score {
+		t.Fatal("grimace should not change the outfit score")
+	}
+}
+
+func TestRetro90sStyleDoesNotDependOnTraditionalSignal(t *testing.T) {
+	features := baseFeatures()
+	features.TraditionalElements = 100
+	features.Signals.Retro90s = 100
+	result, err := NewEngine().Evaluate(features)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.PrimaryCategory.Code != "retro_90s" || result.PrimaryCategory.Title != "Бандит 90-х" {
+		t.Fatalf("retro outfit should win: %+v", result.PrimaryCategory)
+	}
+	if result.LevelTitle != "Стиляга" {
+		t.Fatalf("styler level was renamed: %q", result.LevelTitle)
+	}
+	features.Signals.Retro90s = 0
+	result, err = NewEngine().Evaluate(features)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.PrimaryCategory.Code == "traditional_accent" || result.PrimaryCategory.Code == "retro_90s" {
+		t.Fatalf("traditional or retro category selected without retro outfit: %+v", result.PrimaryCategory)
+	}
+}
+
+func TestHealthyLevelTitle(t *testing.T) {
+	if got := level(65).title; got != "Здравый пацан" {
+		t.Fatalf("level title = %q", got)
+	}
+}

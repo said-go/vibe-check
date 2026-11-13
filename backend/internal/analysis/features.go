@@ -16,6 +16,7 @@ type SubcultureSignals struct {
 	Streetwear  int `json:"streetwear"`
 	Classic     int `json:"classic"`
 	SportChic   int `json:"sport_chic"`
+	Retro90s    int `json:"retro_90s,omitempty"`
 }
 
 type VisualFeatures struct {
@@ -40,6 +41,7 @@ type VisualFeatures struct {
 	PiercingVisible     bool              `json:"piercing_visible"`
 	HairBelowEars       bool              `json:"hair_below_ears_visible"`
 	HairOverEyes        bool              `json:"hair_over_eyes_visible"`
+	PlayfulGrimace      bool              `json:"playful_grimace_visible"`
 	Signals             SubcultureSignals `json:"subculture_signals"`
 }
 
@@ -100,6 +102,7 @@ func (f VisualFeatures) Validate() error {
 		"subculture_signals.goth": f.Signals.Goth, "subculture_signals.alternative": f.Signals.Alternative,
 		"subculture_signals.streetwear": f.Signals.Streetwear, "subculture_signals.classic": f.Signals.Classic,
 		"subculture_signals.sport_chic": f.Signals.SportChic,
+		"subculture_signals.retro_90s":  f.Signals.Retro90s,
 	}
 	for name, value := range values {
 		if value < 0 || value > 100 {

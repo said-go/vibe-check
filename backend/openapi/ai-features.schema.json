@@ -32,6 +32,7 @@
     "piercing_visible": { "type": "boolean", "description": "Clearly visible piercing on the main subject, excluding a single ordinary earring." },
     "hair_below_ears_visible": { "type": "boolean", "description": "Hair visibly extends below the ears; a weak style cue alone." },
     "hair_over_eyes_visible": { "type": "boolean", "description": "Hair visibly covers one or both eyes; a weak style cue alone." },
+    "playful_grimace_visible": { "type": "boolean", "description": "Clearly deliberate playful facial grimace; false for ordinary smile, blink or unclear face." },
     "subculture_signals": {
       "type": "object",
       "additionalProperties": false,
@@ -41,7 +42,8 @@
         "alternative": { "$ref": "#/$defs/score" },
         "streetwear": { "$ref": "#/$defs/score" },
         "classic": { "$ref": "#/$defs/score" },
-        "sport_chic": { "$ref": "#/$defs/score" }
+        "sport_chic": { "$ref": "#/$defs/score" },
+        "retro_90s": { "$ref": "#/$defs/score", "description": "Visible 1990s costume or fashion cues only; never infer criminality." }
       }
     }
   },
