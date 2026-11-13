@@ -119,3 +119,73 @@ func TestYandexAnalyzeUnconfigured(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestYandexAnalyzeRetriesInvalidModelAnswerOnce(t *testing.T) {
+	var calls int
+	var firstRequest string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		var body json.RawMessage
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		if calls == 1 {
+			firstRequest = string(body)
+			_, _ = w.Write([]byte(`{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"{}"}}]}`))
+			return
+		}
+		if string(body) != firstRequest {
+			t.Error("retry changed the image or prompt")
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": "stop", "message": map[string]any{"role": "assistant", "content": featureJSON}}}})
+	}))
+	defer server.Close()
+	provider := NewYandex("key", "folder", "model", server.URL, server.Client())
+	features, err := provider.Analyze(context.Background(), []byte("jpeg"))
+	if err != nil || features.Confidence != 86 || calls != 2 {
+		t.Fatalf("features=%+v err=%v calls=%d", features, err, calls)
+	}
+}
+
+func TestYandexAnalyzeDoesNotRetryRejectedOrUnavailable(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		code int
+		body string
+		want error
+	}{
+		{"refusal", 200, `{"choices":[{"finish_reason":"stop","message":{"role":"assistant","refusal":"cannot comply"}}]}`, ErrRejected},
+		{"bad request", 400, `{}`, ErrRejected},
+		{"rate limited", 429, `{}`, ErrUnavailable},
+		{"server unavailable", 503, `{}`, ErrUnavailable},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				calls++
+				w.WriteHeader(tc.code)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer server.Close()
+			provider := NewYandex("key", "folder", "model", server.URL, server.Client())
+			_, err := provider.Analyze(context.Background(), []byte("jpeg"))
+			if !errors.Is(err, tc.want) || calls != 1 {
+				t.Fatalf("err=%v calls=%d", err, calls)
+			}
+		})
+	}
+}
+
+func TestYandexAnalyzeInvalidTwiceStops(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		_, _ = w.Write([]byte(`{"choices":[]}`))
+	}))
+	defer server.Close()
+	provider := NewYandex("key", "folder", "model", server.URL, server.Client())
+	_, err := provider.Analyze(context.Background(), []byte("jpeg"))
+	if !errors.Is(err, ErrInvalidResponse) || calls != 2 {
+		t.Fatalf("err=%v calls=%d", err, calls)
+	}
+}

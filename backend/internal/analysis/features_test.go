@@ -40,6 +40,14 @@ func TestDecodeAlternativeStyleCues(t *testing.T) {
 	}
 }
 
+func TestDecodeVisiblePoseAndExpression(t *testing.T) {
+	input := strings.Replace(validJSON, `"person_count":1,`, `"person_count":1,"serious_index_pose_visible":true,"gentle_smile_visible":true,`, 1)
+	features, err := DecodeFeatures(strings.NewReader(input))
+	if err != nil || !features.SeriousIndexPose || !features.GentleSmile {
+		t.Fatalf("features = %+v, error = %v", features, err)
+	}
+}
+
 func TestDecodeWithoutRecognizableClothingColor(t *testing.T) {
 	input := strings.Replace(validJSON, `["black","gray"]`, `[]`, 1)
 	features, err := DecodeFeatures(strings.NewReader(input))

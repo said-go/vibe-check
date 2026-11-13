@@ -43,10 +43,10 @@
       ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.font = '800 100px Unbounded, Arial, sans-serif';
       ctx.fillText(String(record.score), 830, 560);
     }
-    ctx.textAlign = 'left'; ctx.fillStyle = '#ffffff'; ctx.font = '800 38px Manrope, Arial, sans-serif';
-    wrap(ctx, record.levelTitle.toUpperCase(), 130, 445, 535, 58, 2);
+    ctx.textAlign = 'left'; ctx.fillStyle = '#ffffff'; ctx.font = '800 56px Unbounded, Arial, sans-serif';
+    wrap(ctx, record.category.toUpperCase(), 130, 465, 535, 70, 2);
     ctx.font = '700 30px Manrope, Arial, sans-serif';
-    wrap(ctx, `Стиль: ${record.category}`, 130, 590, 520, 44, 2);
+    wrap(ctx, `Образ: ${record.levelTitle}`, 130, 620, 520, 44, 2);
 
     ctx.fillStyle = INK; ctx.font = '800 29px Manrope, Arial, sans-serif';
     const metrics = [

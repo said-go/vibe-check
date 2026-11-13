@@ -29,7 +29,7 @@ paths:
   /v1/analyses:
     post:
       operationId: analyzeImage
-      description: Sanitizes one JPEG or PNG in memory after explicit consent, sends it to the configured AI provider, then scores visual outfit features. The image is not persisted by this server. Duplicate or unexpected fields are rejected.
+      description: Sanitizes one JPEG or PNG in memory after explicit consent. Approved exact photos receive an owner-defined result after visual verification; other images go to the configured AI provider for outfit scoring. The image is not persisted by this server. Duplicate or unexpected fields are rejected.
       parameters:
         - in: header
           name: X-Request-ID
@@ -38,6 +38,10 @@ paths:
           name: Idempotency-Key
           description: Optional stable key for retries of the same photo. Kept in process memory for 10 minutes; reuse with a different image returns 409.
           schema: { type: string, minLength: 16, maxLength: 80, pattern: '^[A-Za-z0-9_-]+$' }
+        - in: header
+          name: X-Original-Image-SHA256
+          description: Optional digest of the original file before browser compression. Owner-approved photos also require a visual match against the uploaded sanitized image before returning a preset result.
+          schema: { type: string, pattern: '^[a-f0-9]{64}$' }
       requestBody:
         required: true
         content:

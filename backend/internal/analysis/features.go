@@ -42,6 +42,8 @@ type VisualFeatures struct {
 	HairBelowEars       bool              `json:"hair_below_ears_visible"`
 	HairOverEyes        bool              `json:"hair_over_eyes_visible"`
 	PlayfulGrimace      bool              `json:"playful_grimace_visible"`
+	SeriousIndexPose    bool              `json:"serious_index_pose_visible"`
+	GentleSmile         bool              `json:"gentle_smile_visible"`
 	Signals             SubcultureSignals `json:"subculture_signals"`
 }
 

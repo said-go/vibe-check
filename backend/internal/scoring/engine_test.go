@@ -196,6 +196,61 @@ func TestPlayfulGrimaceWinsOnlyWhenVisible(t *testing.T) {
 	}
 }
 
+func TestVisiblePoseAndSmileChoosePlayfulCategories(t *testing.T) {
+	engine := NewEngine()
+	baseline, err := engine.Evaluate(baseFeatures())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, wantCode, wantTitle, summaryCue string
+		pose, smile                           bool
+	}{
+		{"raised index and serious face", "cool_pose", "Типо крутой", "палец", true, false},
+		{"small relaxed smile", "pupsik", "Пупсик", "улыбка", false, true},
+		{"both cues favor pose", "cool_pose", "Типо крутой", "палец", true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			features := baseFeatures()
+			features.SeriousIndexPose = tc.pose
+			features.GentleSmile = tc.smile
+			result, err := engine.Evaluate(features)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.PrimaryCategory.Code != tc.wantCode || result.PrimaryCategory.Title != tc.wantTitle || !strings.Contains(strings.ToLower(result.Summary), tc.summaryCue) {
+				t.Fatalf("unexpected verdict: %+v", result)
+			}
+			if result.Score != baseline.Score || result.Level != baseline.Level {
+				t.Fatalf("pose or smile changed clothing score: %+v, baseline %+v", result, baseline)
+			}
+		})
+	}
+}
+
+func TestClownAndMulaKeepPriorityOverPoseAndSmile(t *testing.T) {
+	features := baseFeatures()
+	features.GentleSmile = true
+	features.SeriousIndexPose = true
+	features.SkullcapVisible = true
+	features.BeardVisible = true
+	result, err := NewEngine().Evaluate(features)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.PrimaryCategory.Code != "mula" || result.SecondaryCategory.Code != "cool_pose" {
+		t.Fatalf("special category priority changed: %+v", result)
+	}
+	features.PlayfulGrimace = true
+	result, err = NewEngine().Evaluate(features)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.PrimaryCategory.Code != "clown" || result.SecondaryCategory.Code != "mula" {
+		t.Fatalf("grimace priority changed: %+v", result)
+	}
+}
+
 func TestRetro90sStyleDoesNotDependOnTraditionalSignal(t *testing.T) {
 	features := baseFeatures()
 	features.TraditionalElements = 100

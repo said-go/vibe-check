@@ -201,6 +201,10 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 		}
 		s.writeAnalysisOutcome(w, r, outcome)
 	}
+	if result, ok := matchPhotoPreset(r.Header.Get("X-Original-Image-SHA256"), sanitized.JPEG); ok {
+		complete(analysisOutcome{result: result, analysisID: requestIDFrom(r)})
+		return
+	}
 	if !s.configured {
 		complete(analysisOutcome{visionErr: vision.ErrUnavailable})
 		return

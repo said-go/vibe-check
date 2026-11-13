@@ -6,7 +6,7 @@ const ctx = canvas.getContext('2d', { willReadFrequently: true });
 let stream = null;
 let currentImage = '';
 let currentFile = null;
-let currentPreset = null;
+let currentOriginalHash = '';
 let analysisKey = '';
 let currentRecord = null;
 let currentCardBlob = null;
@@ -20,26 +20,10 @@ let focusBeforeModal = null;
 let availabilityGeneration = 0;
 const API_BASE = (window.VIBE_API_BASE_URL || '/api').replace(/\/$/, '');
 const MAX_UPLOAD_BYTES = 2.5 * 1024 * 1024;
-// Only SHA-256 fingerprints and owner-edited entertainment results are bundled; no photos are bundled.
-const PHOTO_PRESETS = Object.freeze({
-  f1c8dc5f938b95675b54e169d8139c4166f61e2b1fe807114fcfd44ba64d7624: {
-    title: 'Чушпан', summary: 'Самому не стыдно было присылать такое фото!',
-    score: 58, levelTitle: 'Уже можно выходить',
-    metrics: { coherence: 55, originality: 60, colorHarmony: 62 },
-    recommendations: ['На следующем фото дай одежде чуть больше места в кадре']
-  },
-  '4b4941958438cac8fb68040995e00f70172f527b6db0c75ecae818f7c6238173': {
-    title: 'Пупсик', summary: 'Мягкий человек с доброй душой, но очень наивный',
-    score: 78, levelTitle: 'Стиляга',
-    metrics: { coherence: 78, originality: 72, colorHarmony: 82 },
-    recommendations: ['Один яркий аксессуар — и образ заиграет ещё сильнее']
-  }
-});
-async function presetForFile(file) {
-  if (!crypto.subtle) return null;
+async function originalHashForFile(file) {
+  if (!crypto.subtle) return '';
   const bytes = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-  const fingerprint = [...new Uint8Array(bytes)].map(value => value.toString(16).padStart(2, '0')).join('');
-  return PHOTO_PRESETS[fingerprint] || null;
+  return [...new Uint8Array(bytes)].map(value => value.toString(16).padStart(2, '0')).join('');
 }
 const steps = ['capture-step', 'consent-step', 'analyzing-step', 'error-step', 'result-step'];
 
@@ -73,12 +57,13 @@ function showStep(id) {
   heading.focus();
 }
 function cancelRequest() { requestGeneration++; activeRequest?.abort(); activeRequest = null; }
-function clearPhoto() { photoGeneration++; currentFile = null; currentPreset = null; currentImage = ''; analysisKey = ''; currentRecord = null; currentCardBlob = null; $('#consent-image').removeAttribute('src'); $('#analysis-image').removeAttribute('src'); $('#result-image').removeAttribute('src'); canvas.width = 0; canvas.height = 0; }
+function clearPhoto() { photoGeneration++; currentFile = null; currentOriginalHash = ''; currentImage = ''; analysisKey = ''; currentRecord = null; currentCardBlob = null; $('#consent-image').removeAttribute('src'); $('#analysis-image').removeAttribute('src'); $('#result-image').removeAttribute('src'); canvas.width = 0; canvas.height = 0; }
 
 function openModal(withCamera = true, returnFocus = document.activeElement) {
   focusBeforeModal = returnFocus;
   cancelRequest(); clearPhoto();
   modal.hidden = false;
+  showPendingUpdate();
   document.body.style.overflow = 'hidden';
   resetFlow();
   if (withCamera) startCamera();
@@ -87,6 +72,7 @@ function closeModal() {
   cancelRequest(); clearPhoto(); modal.hidden = true; document.body.style.overflow = ''; stopCamera();
   focusBeforeModal?.focus();
   focusBeforeModal = null;
+  showPendingUpdate();
 }
 function stopCamera() {
   cameraGeneration++;
@@ -144,10 +130,10 @@ async function useFile(file) {
     if (!blob) {
       showError('Не удалось достаточно сжать фото. Попробуй другой кадр.', false); return;
     }
-    const preset = await presetForFile(file).catch(() => null);
+    const originalHash = await originalHashForFile(file).catch(() => '');
     const src = await blobDataURL(blob);
     if (generation !== photoGeneration || modal.hidden) return;
-    previewPhoto(new File([blob], 'photo.jpg', { type: 'image/jpeg' }), src, preset);
+    previewPhoto(new File([blob], 'photo.jpg', { type: 'image/jpeg' }), src, originalHash);
   } catch {
     if (generation === photoGeneration && !modal.hidden) showError('Браузер не смог открыть это фото. Попробуй JPEG, PNG или WebP.', false);
   } finally {
@@ -179,8 +165,8 @@ async function capture() {
     }
   }
 }
-function previewPhoto(file, src, preset = null) {
-  stopCamera(); cancelRequest(); currentFile = file; currentPreset = preset; currentImage = src; analysisKey = crypto.randomUUID();
+function previewPhoto(file, src, originalHash = '') {
+  stopCamera(); cancelRequest(); currentFile = file; currentOriginalHash = originalHash; currentImage = src; analysisKey = crypto.randomUUID();
   $('#consent-image').src = src; $('#privacy-consent').checked = false; $('#start-analysis').disabled = true;
   $('#consent-error').textContent = ''; showStep('consent-step');
 }
@@ -245,26 +231,6 @@ async function refreshAvailability() {
 }
 async function analyze() {
   if (!currentFile || !$('#privacy-consent').checked) return;
-  if (currentPreset) {
-    const preset = currentPreset;
-    cancelRequest(); const generation = requestGeneration;
-    showStep('analyzing-step'); $('#analysis-image').src = currentImage;
-    $('#analysis-status').textContent = 'Смотрим детали образа';
-    $('#progress-bar').style.width = '65%';
-    await new Promise(resolve => setTimeout(resolve, 800));
-    if (generation !== requestGeneration || modal.hidden || currentPreset !== preset) return;
-    $('#progress-bar').style.width = '100%';
-    showResult({
-      status: 'completed', score: preset.score, level_title: preset.levelTitle,
-      primary_category: { title: preset.title }, summary: preset.summary,
-      metrics: {
-        coherence: preset.metrics.coherence,
-        originality: preset.metrics.originality,
-        color_harmony: preset.metrics.colorHarmony
-      }, recommendations: preset.recommendations
-    }, analysisKey);
-    return;
-  }
   if (!navigator.onLine) { showError('Для нового AI-анализа нужен интернет.', true); return; }
   cancelRequest(); const generation = requestGeneration; const controller = new AbortController(); activeRequest = controller;
   showStep('analyzing-step'); $('#analysis-image').src = currentImage;
@@ -279,7 +245,9 @@ async function analyze() {
     }
     $('#analysis-status').textContent = 'AI анализирует видимые детали образа'; $('#progress-bar').style.width = '65%';
     const payload = new FormData(); payload.append('image', currentFile); payload.append('privacy_consent', 'true');
-    const response = await fetch(`${API_BASE}/v1/analyses`, { method: 'POST', body: payload, headers: { 'Idempotency-Key': analysisKey }, signal: controller.signal });
+    const headers = { 'Idempotency-Key': analysisKey };
+    if (currentOriginalHash) headers['X-Original-Image-SHA256'] = currentOriginalHash;
+    const response = await fetch(`${API_BASE}/v1/analyses`, { method: 'POST', body: payload, headers, signal: controller.signal });
     const data = await response.json().catch(() => ({}));
     if (generation !== requestGeneration || modal.hidden) return;
     if (!response.ok) {
@@ -314,8 +282,8 @@ function showResult(result, analysisId) {
   $('#result-image').src = currentImage;
   $('#result-score').hidden = false;
   $('#result-score').textContent = result.score;
-  $('#result-title').textContent = result.level_title;
-  $('#result-category').textContent = `Стиль: ${result.primary_category.title}`;
+  $('#result-title').textContent = result.primary_category.title;
+  $('#result-level').textContent = `Образ: ${result.level_title}`;
   $('#result-description').textContent = result.summary;
   $('#result-stats').hidden = false;
   $('#style-stat').textContent = `${result.metrics.coherence}%`;
@@ -328,7 +296,7 @@ function showResult(result, analysisId) {
 function resultText(record) {
   return record.score == null
     ? `Мой результат в ВАЙБЧЕК: ${record.category}. ${record.summary}`
-    : `Мой результат в ВАЙБЧЕК: ${record.levelTitle}, стиль ${record.category} — ${record.score}/100. А ты кто сегодня?`;
+    : `Мой результат в ВАЙБЧЕК: ${record.category}. Образ: ${record.levelTitle} — ${record.score}/100. А ты кто сегодня?`;
 }
 
 function historyCard(record) {
@@ -344,9 +312,10 @@ function historyCard(record) {
   top.append(date);
   if (record.score != null) top.append(score);
   const title = document.createElement('h3');
-  title.textContent = record.levelTitle;
-  const category = document.createElement('p');
-  category.textContent = `Стиль: ${record.category}`;
+  title.textContent = record.category;
+  const level = document.createElement('p');
+  level.className = 'history-level';
+  level.textContent = `Образ: ${record.levelTitle}`;
   const actions = document.createElement('div');
   actions.className = 'history-actions';
   for (const [label, action] of [['Скачать карточку', 'download'], ['Удалить', 'delete']]) {
@@ -355,7 +324,7 @@ function historyCard(record) {
     button.dataset.action = action; button.dataset.id = record.id;
     actions.append(button);
   }
-  card.append(top, title, category, actions);
+  card.append(top, title, level, actions);
   return card;
 }
 
@@ -514,6 +483,43 @@ window.addEventListener('appinstalled', () => {
   $('#install-app').hidden = true;
 });
 
+let pendingServiceWorker = null;
+let updateRequested = false;
+let updateReadyToReload = false;
+function showPendingUpdate() {
+  $('#update-banner').hidden = (!pendingServiceWorker && !updateReadyToReload) || !modal.hidden;
+}
+$('#update-app').addEventListener('click', () => {
+  if (!modal.hidden) return;
+  if (updateReadyToReload) { window.location.reload(); return; }
+  if (!pendingServiceWorker) return;
+  updateRequested = true;
+  $('#update-banner').hidden = true;
+  pendingServiceWorker.postMessage({ type: 'SKIP_WAITING' });
+});
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  const hadServiceWorkerController = Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadServiceWorkerController && !updateRequested) return;
+    if (updateRequested) window.location.reload();
+    else { updateReadyToReload = true; showPendingUpdate(); }
+  });
+  window.addEventListener('load', async () => {
+    try {
+      const registration = await navigator.serviceWorker.register('/sw.js');
+      const offerUpdate = worker => {
+        if (!worker || !navigator.serviceWorker.controller) return;
+        pendingServiceWorker = worker;
+        showPendingUpdate();
+      };
+      offerUpdate(registration.waiting);
+      registration.addEventListener('updatefound', () => {
+        const worker = registration.installing;
+        worker?.addEventListener('statechange', () => {
+          if (worker.state === 'installed') offerUpdate(worker);
+        });
+      });
+      window.addEventListener('focus', () => registration.update().catch(() => {}));
+    } catch {}
+  });
 }

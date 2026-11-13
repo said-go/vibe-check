@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -78,11 +79,23 @@ type yandexResponse struct {
 }
 
 func (p *Yandex) Analyze(ctx context.Context, sanitizedJPEG []byte) (analysis.VisualFeatures, error) {
-	if p == nil || p.apiKey == "" || p.folderID == "" || p.model == "" || p.client == nil {
-		return analysis.VisualFeatures{}, ErrUnavailable
-	}
 	if len(sanitizedJPEG) == 0 {
 		return analysis.VisualFeatures{}, ErrInvalidResponse
+	}
+	// A malformed model answer is the only failure that merits another paid call.
+	// Reuse the same image and prompt, and cap recovery at one additional attempt.
+	for attempt := 0; attempt < 2; attempt++ {
+		features, err := p.analyzeOnce(ctx, sanitizedJPEG)
+		if err == nil || !errors.Is(err, ErrInvalidResponse) || ctx.Err() != nil || attempt == 1 {
+			return features, err
+		}
+	}
+	return analysis.VisualFeatures{}, ErrInvalidResponse
+}
+
+func (p *Yandex) analyzeOnce(ctx context.Context, sanitizedJPEG []byte) (analysis.VisualFeatures, error) {
+	if p == nil || p.apiKey == "" || p.folderID == "" || p.model == "" || p.client == nil {
+		return analysis.VisualFeatures{}, ErrUnavailable
 	}
 	requestBody := yandexRequest{Model: "gpt://" + p.folderID + "/" + p.model}
 	requestBody.MaxCompletionTokens = 4096

@@ -28,6 +28,11 @@
     </div>
   </header>
 
+  <div class="update-banner" id="update-banner" role="status" aria-live="polite" hidden>
+    <span>ВАЙБЧЕК обновился. Открой свежую версию, когда закончишь с фото.</span>
+    <button class="update-button" id="update-app" type="button">Обновить</button>
+  </div>
+
   <main>
     <section class="hero" id="start">
       <div class="hero-copy">
@@ -128,7 +133,7 @@
 
       <div class="result-step" id="result-step" hidden>
         <div class="result-photo"><img id="result-image" alt="Ваше фото" /><div class="result-badge" id="result-score">—</div></div>
-        <div class="result-copy"><p class="eyebrow">вердикт готов</p><h2 id="result-title" tabindex="-1"></h2><p class="result-category" id="result-category"></p><p id="result-description"></p>
+        <div class="result-copy"><p class="eyebrow">вердикт готов</p><h2 id="result-title" tabindex="-1"></h2><p class="result-level" id="result-level"></p><p id="result-description"></p>
           <div class="stat-list" id="result-stats"><div><span>КАК СОЧЕТАЕТСЯ</span><b id="style-stat">—</b></div><div><span>НАСКОЛЬКО НЕОБЫЧНО</span><b id="energy-stat">—</b></div><div><span>ЦВЕТА</span><b id="aura-stat">—</b></div></div>
           <p id="result-recommendations"></p>
           <div class="modal-actions"><button class="btn btn-primary" id="again">Ещё раз</button><button class="btn btn-ghost" id="save-result">Сохранить в историю</button><button class="btn btn-ghost" id="download-card">Скачать карточку</button><button class="btn btn-ghost" id="share">Поделиться</button></div>

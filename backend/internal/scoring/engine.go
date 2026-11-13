@@ -76,6 +76,12 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 		}
 		return ranked[i].Score > ranked[j].Score
 	})
+	if features.GentleSmile {
+		ranked = append([]CategoryScore{{Code: "pupsik", Title: "Пупсик", Score: 100}}, ranked...)
+	}
+	if features.SeriousIndexPose {
+		ranked = append([]CategoryScore{{Code: "cool_pose", Title: "Типо крутой", Score: 100}}, ranked...)
+	}
 	if features.SkullcapVisible && features.BeardVisible {
 		ranked = append([]CategoryScore{{Code: "mula", Title: "Мула", Score: 100}}, ranked...)
 	}
@@ -89,6 +95,12 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 	}
 	if ranked[0].Code == "clown" {
 		primaryRule.Summary = "Пытались оценить стиль, но гримаса перехватила эфир. Сегодня главный аксессуар — чувство юмора."
+	}
+	if ranked[0].Code == "cool_pose" {
+		primaryRule.Summary = "Указательный палец поднят, взгляд серьёзный. Похоже, сейчас прозвучит важная мысль — осталось придумать какая."
+	}
+	if ranked[0].Code == "pupsik" {
+		primaryRule.Summary = "Лёгкая улыбка, спокойный кадр. Выглядит так, будто фото уже собрало лайки до публикации."
 	}
 	result := Result{
 		Status: "completed", PrimaryCategory: ranked[0], SecondaryCategory: ranked[1],
