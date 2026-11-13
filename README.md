@@ -9,7 +9,7 @@ PWA для развлекательного анализа стиля одежд
 Нужны Go 1.25, API-ключ сервисного аккаунта Yandex Cloud и ID каталога. Для локального запуска впишите их в `backend/.env` после `YANDEX_API_KEY=` и `YANDEX_FOLDER_ID=`, затем из корня репозитория выполните:
 
 ```powershell
-pwsh -NoProfile -File scripts/run-local.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-local.ps1
 ```
 
 `backend/.env` исключён из Git; скрипт загружает его только в окружение локального процесса и не выводит значения. Для развёрнутого контейнера ключ передаётся из Lockbox, а не из этого файла. Образец переменных — `backend/.env.example`.
