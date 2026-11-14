@@ -94,6 +94,46 @@ test('oversize upload gets an actionable error before decoding or sending', asyn
   assert.match(b.node('#error-description').textContent,/до 25 МБ/);
   assert.equal(b.calls().length,0);
 });
+
+test('empty file is rejected before image decoding', async () => {
+  const b=await browser();b.prepare();
+  await b.run("useFile(new Blob([]))");
+  assert.match(b.node('#error-description').textContent,/пустой/);
+  assert.equal(b.run('currentFile'),null);
+});
+
+test('unsupported HEIC receives format-specific guidance without uploading', async () => {
+  const b=await browser();b.prepare();
+  await b.run("globalThis.Image=class { async decode() {throw Error('unsupported');} }; useFile(new Blob(['heic'],{type:'image/heic'}))");
+  assert.match(b.node('#error-description').textContent,/HEIC.*JPEG/);
+  assert.equal(b.calls().length,0);
+});
+
+test('decoded oversized dimensions are rejected before allocating canvas', async () => {
+  const b=await browser();b.prepare();
+  await b.run("globalThis.Image=class {naturalWidth=20000;naturalHeight=10000;async decode(){}}; useFile(new Blob(['image']))");
+  assert.match(b.node('#error-description').textContent,/100 мегапикселей/);
+  assert.equal(b.node('#canvas').width,0);
+});
+
+test('stalled decode times out and releases its timer without uploading', async () => {
+  const b=await browser();b.prepare();
+  const pending=b.run("globalThis.Image=class {decode(){return new Promise(()=>{});}}; useFile(new Blob(['image']))");
+  const timeout=[...b.timers.values()].find(t=>t.ms===15000);
+  assert.ok(timeout);timeout.fn();await pending;
+  assert.match(b.node('#error-description').textContent,/долго открывается/);
+  assert.equal([...b.timers.values()].some(t=>t.ms===15000),false);
+  assert.equal(b.calls().length,0);
+});
+
+test('late decode failure after closing cannot overwrite UI', async () => {
+  const b=await browser();b.prepare();
+  const pending=b.run("let rejectDecode; globalThis.Image=class {decode(){return new Promise((_,reject)=>{rejectDecode=reject;});}}; useFile(new Blob(['image']))");
+  b.run("closeModal(); rejectDecode(Error('decode failed'))");await pending;
+  assert.equal(b.node('#camera-modal').hidden,true);
+  assert.equal(b.node('#error-description').textContent,'');
+  assert.equal(b.run('currentFile'),null);
+});
 test('analysis timeout aborts the request and offers retry without losing photo key', async () => {
   const b=await browser(); b.prepare();
   b.setFetch(async (url,options)=>url.includes('readyz')?response({status:'ready'}):new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(new DOMException('aborted','AbortError')))));

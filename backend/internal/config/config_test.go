@@ -1,9 +1,30 @@
 package config
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestTrustedProxyConfiguration(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	for _, raw := range []string{"bad", "0.0.0.0/0", "::/0", "10.0.0.1/32,", "::ffff:10.0.0.1/128", strings.Repeat("x", 4097)} {
+		t.Setenv("TRUSTED_PROXY_CIDRS", raw)
+		if _, err := Load(); err == nil {
+			t.Fatalf("accepted invalid proxy config %q", raw)
+		}
+	}
+	t.Setenv("TRUSTED_PROXY_CIDRS", "10.0.0.1/32, 2001:db8::/64")
+	c, err := Load()
+	if err != nil || len(c.TrustedProxyCIDRs) != 2 {
+		t.Fatalf("valid config: %v", err)
+	}
+	t.Setenv("TRUSTED_PROXY_CIDRS", "")
+	c, err = Load()
+	if err != nil || len(c.TrustedProxyCIDRs) != 0 {
+		t.Fatal("default must disable proxy trust")
+	}
+}
 
 func TestValidateRejectsInvalidConfiguration(t *testing.T) {
 	tests := []Config{

@@ -3,13 +3,16 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
 type Config struct {
+	TrustedProxyCIDRs       []netip.Prefix
 	Environment             string
 	Address                 string
 	ReadTimeout             time.Duration
@@ -56,6 +59,18 @@ func Load() (Config, error) {
 		OpenAIModel:             os.Getenv("OPENAI_MODEL"),
 		OpenAIBaseURL:           env("OPENAI_BASE_URL", "https://api.openai.com/v1"),
 		OpenAITimeout:           duration("OPENAI_TIMEOUT", 45*time.Second),
+	}
+	if raw := strings.TrimSpace(os.Getenv("TRUSTED_PROXY_CIDRS")); raw != "" {
+		if len(raw) > 4096 {
+			return cfg, errors.New("TRUSTED_PROXY_CIDRS is too long")
+		}
+		for _, item := range strings.Split(raw, ",") {
+			prefix, err := netip.ParsePrefix(strings.TrimSpace(item))
+			if err != nil || prefix.Bits() == 0 || prefix.Addr().Is4In6() {
+				return cfg, errors.New("TRUSTED_PROXY_CIDRS must contain explicit IPv4 or IPv6 CIDRs, not default routes")
+			}
+			cfg.TrustedProxyCIDRs = append(cfg.TrustedProxyCIDRs, prefix.Masked())
+		}
 	}
 	return cfg, cfg.Validate()
 }

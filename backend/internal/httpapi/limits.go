@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"sync"
 	"time"
@@ -11,9 +12,10 @@ import (
 // Limits bound billable AI calls per server instance. A reverse proxy must
 // enforce its own public limits when several instances are deployed.
 type Limits struct {
-	PerHour         int
-	PerClientMinute int
-	Concurrent      int
+	TrustedProxyCIDRs []netip.Prefix
+	PerHour           int
+	PerClientMinute   int
+	Concurrent        int
 }
 
 var DefaultLimits = Limits{PerHour: 30, PerClientMinute: 3, Concurrent: 2}
@@ -60,7 +62,7 @@ func (l *requestLimiter) acquire(r *http.Request, knownRetry ...bool) (*admissio
 	default:
 		return nil, 1
 	}
-	key := clientKey(r)
+	key := proxyClientKey(r, l.limits.TrustedProxyCIDRs)
 	now := time.Now()
 	l.mu.Lock()
 	l.rollWindows(now)

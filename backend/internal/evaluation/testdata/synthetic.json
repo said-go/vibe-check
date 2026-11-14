@@ -1,0 +1,164 @@
+{
+  "kind": "synthetic",
+  "cases": [
+    {
+      "id": "synthetic-casual",
+      "features": {
+        "contract_version": "1.0.0",
+        "dominant_colors": [],
+        "color_harmony": 60,
+        "darkness": 10,
+        "formality": 10,
+        "sportiness": 10,
+        "originality": 20,
+        "outfit_coherence": 60,
+        "accessory_intensity": 10,
+        "layering": 10,
+        "traditional_elements": 0,
+        "image_quality": 80,
+        "outfit_visibility": 80,
+        "confidence": 80,
+        "person_count": 1,
+        "subculture_signals": {
+          "goth": 0,
+          "alternative": 0,
+          "streetwear": 0,
+          "classic": 10,
+          "sport_chic": 0
+        }
+      },
+      "expected": {
+        "status": "completed",
+        "category": "healthy_casual"
+      }
+    },
+    {
+      "id": "synthetic-smile",
+      "features": {
+        "contract_version": "1.0.0",
+        "dominant_colors": [],
+        "color_harmony": 60,
+        "darkness": 10,
+        "formality": 10,
+        "sportiness": 10,
+        "originality": 20,
+        "outfit_coherence": 60,
+        "accessory_intensity": 10,
+        "layering": 10,
+        "traditional_elements": 0,
+        "image_quality": 80,
+        "outfit_visibility": 80,
+        "confidence": 80,
+        "person_count": 1,
+        "subculture_signals": {
+          "goth": 0,
+          "alternative": 0,
+          "streetwear": 0,
+          "classic": 10,
+          "sport_chic": 0
+        },
+        "gentle_smile_visible": true
+      },
+      "expected": {
+        "status": "completed",
+        "category": "pupsik"
+      }
+    },
+    {
+      "id": "synthetic-grimace",
+      "features": {
+        "contract_version": "1.0.0",
+        "dominant_colors": [],
+        "color_harmony": 60,
+        "darkness": 10,
+        "formality": 10,
+        "sportiness": 10,
+        "originality": 20,
+        "outfit_coherence": 60,
+        "accessory_intensity": 10,
+        "layering": 10,
+        "traditional_elements": 0,
+        "image_quality": 80,
+        "outfit_visibility": 80,
+        "confidence": 80,
+        "person_count": 1,
+        "subculture_signals": {
+          "goth": 0,
+          "alternative": 0,
+          "streetwear": 0,
+          "classic": 10,
+          "sport_chic": 0
+        },
+        "playful_grimace_visible": true
+      },
+      "expected": {
+        "status": "completed",
+        "category": "clown"
+      }
+    },
+    {
+      "id": "synthetic-no-person",
+      "features": {
+        "contract_version": "1.0.0",
+        "dominant_colors": [],
+        "color_harmony": 60,
+        "darkness": 10,
+        "formality": 10,
+        "sportiness": 10,
+        "originality": 20,
+        "outfit_coherence": 60,
+        "accessory_intensity": 10,
+        "layering": 10,
+        "traditional_elements": 0,
+        "image_quality": 80,
+        "outfit_visibility": 80,
+        "confidence": 80,
+        "person_count": 0,
+        "subculture_signals": {
+          "goth": 0,
+          "alternative": 0,
+          "streetwear": 0,
+          "classic": 10,
+          "sport_chic": 0
+        }
+      },
+      "expected": {
+        "status": "low_confidence",
+        "category": "",
+        "reason": "single_person_required"
+      }
+    },
+    {
+      "id": "synthetic-low-confidence",
+      "features": {
+        "contract_version": "1.0.0",
+        "dominant_colors": [],
+        "color_harmony": 60,
+        "darkness": 10,
+        "formality": 10,
+        "sportiness": 10,
+        "originality": 20,
+        "outfit_coherence": 60,
+        "accessory_intensity": 10,
+        "layering": 10,
+        "traditional_elements": 0,
+        "image_quality": 80,
+        "outfit_visibility": 80,
+        "confidence": 19,
+        "person_count": 1,
+        "subculture_signals": {
+          "goth": 0,
+          "alternative": 0,
+          "streetwear": 0,
+          "classic": 10,
+          "sport_chic": 0
+        }
+      },
+      "expected": {
+        "status": "low_confidence",
+        "category": "",
+        "reason": "ai_confidence_too_low"
+      }
+    }
+  ]
+}

@@ -23,6 +23,16 @@ let retryTimer = null;
 let retryUntil = 0;
 const API_BASE = (window.VIBE_API_BASE_URL || '/api').replace(/\/$/, '');
 const MAX_UPLOAD_BYTES = 2.5 * 1024 * 1024;
+const MAX_DECODED_PIXELS = 100 * 1000 * 1000;
+async function decodePhoto(image) {
+  let timeout;
+  try {
+    await Promise.race([
+      image.decode(),
+      new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('photo_decode_timeout')), 15000); })
+    ]);
+  } finally { clearTimeout(timeout); }
+}
 async function originalHashForFile(file) {
   if (!crypto.subtle) return '';
   const bytes = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
@@ -112,6 +122,9 @@ async function useFile(file) {
   if (!file) return;
   lastPhotoSource = 'file';
   cancelRequest(); clearPhoto(); stopCamera();
+  if (file.size === 0) {
+    showError('Этот файл пустой. Выбери другое фото.', false); return;
+  }
   if (file.size > 25 * 1024 * 1024) {
     showError('Фото слишком большое. Выбери файл до 25 МБ.', false); return;
   }
@@ -120,8 +133,11 @@ async function useFile(file) {
   try {
     const image = new Image();
     image.src = url;
-    await image.decode();
+    await decodePhoto(image);
     if (generation !== photoGeneration || modal.hidden) return;
+    if (!Number.isFinite(image.naturalWidth * image.naturalHeight) || image.naturalWidth * image.naturalHeight > MAX_DECODED_PIXELS) {
+      showError('У фото слишком большое разрешение. Уменьши его до 100 мегапикселей или выбери другой кадр.', false); return;
+    }
     if (Math.min(image.naturalWidth, image.naturalHeight) < 128) {
       showError('Фото слишком маленькое. Нужен кадр хотя бы 128×128 пикселей.', false); return;
     }
@@ -143,8 +159,15 @@ async function useFile(file) {
     const src = await blobDataURL(blob);
     if (generation !== photoGeneration || modal.hidden) return;
     previewPhoto(new File([blob], 'photo.jpg', { type: 'image/jpeg' }), src, originalHash);
-  } catch {
-    if (generation === photoGeneration && !modal.hidden) showError('Браузер не смог открыть это фото. Попробуй JPEG, PNG или WebP.', false);
+  } catch (error) {
+    if (generation === photoGeneration && !modal.hidden) {
+      const isHEIC = /image\/hei[cf]/i.test(file.type || '') || /\.hei[cf]$/i.test(file.name || '');
+      const message = error?.message === 'photo_decode_timeout'
+        ? 'Фото слишком долго открывается. Сохрани его в JPEG или выбери другой кадр.'
+        : isHEIC ? 'Этот браузер не смог открыть HEIC. Сохрани фото в JPEG или выбери снимок в другом формате.'
+        : 'Браузер не смог открыть это фото. Попробуй JPEG, PNG или WebP.';
+      showError(message, false);
+    }
   } finally {
     URL.revokeObjectURL(url);
   }

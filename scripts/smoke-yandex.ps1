@@ -34,6 +34,16 @@ foreach ($check in @(
         catch { throw 'PWA manifest is not valid JSON.' }
         if (-not $manifest.name -or -not $manifest.icons) { throw 'PWA manifest is incomplete.' }
     }
+    if ($check.Path -eq '/') {
+        $assets = @([regex]::Matches($response.Content, '(?:src|href)="/?(assets/[a-z-]+\.[a-f0-9]{16}\.(?:js|css))"') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
+        if ($assets.Count -lt 4) { throw 'HTML does not reference a complete versioned PWA release.' }
+        foreach ($asset in $assets) {
+            $resource = Invoke-WebRequest -Uri "$origin/$asset" -UseBasicParsing -TimeoutSec 15 -MaximumRedirection 0
+            $expectedType = if ($asset.EndsWith('.css')) { 'text/css' } else { '*javascript*' }
+            if ($resource.StatusCode -ne 200 -or $resource.Headers['Content-Type'] -notlike "$expectedType*") { throw "PWA resource is unavailable or has incorrect Content-Type: $asset" }
+            Write-Host "OK /$asset (200)"
+        }
+    }
     Write-Host "OK $($check.Path) (200)"
 }
 Write-Host 'Smoke checks passed. Test the consent and AI result flow with a non-sensitive image before inviting users.'

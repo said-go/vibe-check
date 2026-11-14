@@ -35,6 +35,7 @@ func main() {
 	logger.Info("provider_budget_configured", "scope", "process", "calls_per_hour", cfg.AnalysesPerHour, "calls_per_client_minute", cfg.AnalysesPerClientMinute, "presets_loaded", len(presets))
 	api := httpapi.NewWithPresets(logger, cfg.MaxRequestBytes, provider, httpapi.Limits{
 		PerHour: int(cfg.AnalysesPerHour), PerClientMinute: int(cfg.AnalysesPerClientMinute), Concurrent: int(cfg.MaxConcurrentAnalyses),
+		TrustedProxyCIDRs: cfg.TrustedProxyCIDRs,
 	}, presets)
 	mux := http.NewServeMux()
 	mux.Handle("/api/", http.StripPrefix("/api", api))
