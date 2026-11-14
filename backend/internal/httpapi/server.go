@@ -60,12 +60,20 @@ func NewWithPresets(logger *slog.Logger, maxRequestBytes int64, provider vision.
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
-func (s *Server) ready(w http.ResponseWriter, _ *http.Request) {
-	if !s.configured && len(s.presets) == 0 {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "ai_unavailable"})
-		return
+func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
+	shared := s.limiter.limits.SharedBudget
+	budgetAvailable := shared == nil
+	if check, ok := shared.(budgetReadiness); ok {
+		budgetAvailable = check.Check(r.Context()) == nil
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ready", "ai_available": s.configured, "presets_available": len(s.presets) > 0})
+	aiAvailable := s.configured && budgetAvailable
+	status, code := "ready", http.StatusOK
+	if !aiAvailable && len(s.presets) == 0 {
+		status, code = "ai_unavailable", http.StatusServiceUnavailable
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, code, map[string]any{"status": status, "ai_available": aiAvailable, "presets_available": len(s.presets) > 0,
+		"shared_budget_configured": shared != nil, "shared_budget_available": budgetAvailable})
 }
 
 type analysisResponse struct {

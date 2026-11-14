@@ -14,6 +14,11 @@ type AttemptBudget interface {
 	Take(context.Context) (int, error)
 }
 
+// budgetReadiness probes connectivity without consuming a paid-call reservation.
+type budgetReadiness interface {
+	Check(context.Context) error
+}
+
 type RedisBudget struct {
 	client *redis.Client
 	key    string
@@ -57,3 +62,12 @@ func (b *RedisBudget) Take(ctx context.Context) (int, error) {
 	return n, nil
 }
 func (b *RedisBudget) Close() error { return b.client.Close() }
+
+func (b *RedisBudget) Check(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if b.client.Ping(ctx).Err() != nil {
+		return errors.New("shared budget unavailable")
+	}
+	return nil
+}

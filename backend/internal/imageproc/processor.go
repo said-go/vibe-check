@@ -71,6 +71,11 @@ func (p Processor) Sanitize(reader io.Reader, declaredType string) (SanitizedIma
 	if err != nil {
 		return SanitizedImage{}, ErrInvalidImage
 	}
+	if detected == "image/jpeg" {
+		if orientation := jpegOrientation(data); orientation != 1 {
+			decoded = orientedImage{decoded, orientation}
+		}
+	}
 	bounds := decoded.Bounds()
 	clean := image.NewRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
 	draw.Draw(clean, clean.Bounds(), &image.Uniform{C: color.RGBA{R: 245, G: 241, B: 234, A: 255}}, image.Point{}, draw.Src)

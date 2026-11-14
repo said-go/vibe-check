@@ -20,12 +20,15 @@ paths:
       operationId: ready
       responses:
         '200':
-          description: AI or private photo presets are configured. Flags describe available paths; this does not validate provider credentials.
+          description: AI is configured with a reachable optional Redis budget, or private presets are available. Does not validate AI credentials or remaining budget.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Readiness' }
         '503':
-          description: Neither AI nor private photo presets are configured.
+          description: No available path (missing AI configuration or unreachable Redis, and no private presets).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Readiness' }
   /v1/analyses:
     post:
       operationId: analyzeImage
@@ -82,11 +85,13 @@ components:
       properties: { status: { type: string } }
     Readiness:
       type: object
-      required: [status, ai_available, presets_available]
+      required: [status, ai_available, presets_available, shared_budget_configured, shared_budget_available]
       properties:
         status: { type: string }
         ai_available: { type: boolean }
         presets_available: { type: boolean }
+        shared_budget_configured: { type: boolean }
+        shared_budget_available: { type: boolean, description: 'True when no shared budget is required, or its non-consuming connectivity check succeeds.' }
     Score:
       type: integer
       minimum: 0
