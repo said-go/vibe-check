@@ -43,8 +43,8 @@
       ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.font = '800 100px Unbounded, Arial, sans-serif';
       ctx.fillText(String(record.score), 830, 560);
     }
-    ctx.textAlign = 'left'; ctx.fillStyle = '#ffffff'; ctx.font = '800 56px Unbounded, Arial, sans-serif';
-    wrap(ctx, record.category.toUpperCase(), 130, 465, 535, 70, 2);
+    ctx.textAlign = 'left'; ctx.fillStyle = '#ffffff'; ctx.font = '800 42px Unbounded, Arial, sans-serif';
+    wrap(ctx, record.category.toUpperCase().replace(/-/g, '- '), 130, 435, 535, 60, 3);
     ctx.font = '700 30px Manrope, Arial, sans-serif';
     wrap(ctx, record.score == null ? 'По позе и деталям в кадре' : `Оценка одежды: ${record.score}/100`, 130, 620, 520, 44, 2);
 

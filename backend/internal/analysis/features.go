@@ -45,6 +45,9 @@ type VisualFeatures struct {
 	SeriousIndexPose    bool              `json:"serious_index_pose_visible"`
 	GentleSmile         bool              `json:"gentle_smile_visible"`
 	RelaxedHeadTilt     bool              `json:"relaxed_head_tilt_visible"`
+	BeardAbsentVisible  bool              `json:"beard_absent_visible"`
+	MuscularVisible     bool              `json:"muscular_visible"`
+	NonMuscularVisible  bool              `json:"non_muscular_visible"`
 	Signals             SubcultureSignals `json:"subculture_signals"`
 }
 
@@ -87,6 +90,12 @@ func DecodeFeatures(reader io.Reader) (VisualFeatures, error) {
 }
 
 func (f VisualFeatures) Validate() error {
+	if f.BeardVisible && f.BeardAbsentVisible {
+		return errors.New("contradictory beard evidence")
+	}
+	if f.MuscularVisible && f.NonMuscularVisible {
+		return errors.New("contradictory muscularity evidence")
+	}
 	if f.ContractVersion != ContractVersion {
 		return fmt.Errorf("unsupported contract_version %q", f.ContractVersion)
 	}
@@ -131,7 +140,11 @@ func (f VisualFeatures) LowConfidenceReason() string {
 // HasPortraitCue reports only explicit cues that can support a playful portrait
 // category without guessing unseen clothing.
 func (f VisualFeatures) HasPortraitCue() bool {
-	return f.PlayfulGrimace || f.SeriousIndexPose || f.HasGentlePose() || (f.SkullcapVisible && f.BeardVisible)
+	return f.PlayfulGrimace || f.SeriousIndexPose || f.HasGentlePose() || (f.SkullcapVisible && f.BeardVisible) || f.MuscularVisible || f.HasAlternativeCombination()
+}
+
+func (f VisualFeatures) HasAlternativeCombination() bool {
+	return f.HairBelowEars && f.BeardAbsentVisible && f.NonMuscularVisible && !f.MuscularVisible
 }
 
 func (f VisualFeatures) HasGentlePose() bool {

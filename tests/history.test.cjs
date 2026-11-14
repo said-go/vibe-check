@@ -103,3 +103,18 @@ test('partial outfit share card retains uncertainty outside the joke', async () 
   assert.ok(c.texts.includes('ПРЕДВАРИТЕЛЬНЫЙ ВЕРДИКТ'));
   assert.ok(c.texts.join(' ').includes('детали могут изменить результат'));
 });
+
+test('renamed categories migrate when reading old saved records', async () => {
+  for (const [before, after] of [['Собранный','Бизнесмен'],['Здравый стиль','Стиляга'],['Уличный стиль','Абушка']]) {
+    const h = history({rows:[{id:'old',createdAt:1,category:before,metrics:{},score:70}]});
+    const [record] = await h.api.list(); assert.equal(record.category,after);
+  }
+});
+
+test('mixed verdict remains one title through saving and sharing', async () => {
+  const h=history();await h.api.save('mixed',{...result,primary_category:{title:'Нефор-качок'}});
+  const [record]=await h.api.list();assert.equal(record.category,'Нефор-качок');
+  const c=card();await c.api.create(record);
+  assert.ok(c.texts.join(' ').includes('НЕФОР- КАЧОК'));
+  assert.ok(c.texts.join(' ').includes('Оценка одежды: 75/100'));
+});

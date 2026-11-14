@@ -11,6 +11,7 @@ import (
 func TestReportCopyVariesWithVisualEvidenceAndStaysStable(t *testing.T) {
 	f := baseFeatures()
 	f.RelaxedHeadTilt = true
+	f.MuscularVisible = true
 	f.SkullcapVisible, f.BeardVisible, f.PlayfulGrimace, f.SeriousIndexPose, f.GentleSmile = true, true, true, true, true
 	for code := range categorySummaries {
 		t.Run(code, func(t *testing.T) {

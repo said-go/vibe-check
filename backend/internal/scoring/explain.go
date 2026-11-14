@@ -10,6 +10,14 @@ import (
 // They deliberately avoid inventing specific garments from broad style signals.
 func (e *Engine) explanations(code string, f analysis.VisualFeatures) []string {
 	switch code {
+	case "muscular":
+		if f.MuscularVisible {
+			return []string{"В кадре отчётливо видна развитая мускулатура."}
+		}
+	case "alternative":
+		if f.HasAlternativeCombination() {
+			return []string{"Волосы ниже ушей, бороды явно нет, выраженная мускулатура не видна на хорошо различимом теле — сработало сочетание."}
+		}
 	case "clown":
 		if f.PlayfulGrimace {
 			return []string{"В кадре заметна нарочитая гримаса — она и задала вердикт."}

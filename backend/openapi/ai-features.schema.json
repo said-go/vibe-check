@@ -34,6 +34,9 @@
     "hair_over_eyes_visible": { "type": "boolean", "description": "Hair visibly covers one or both eyes; a weak style cue alone." },
     "playful_grimace_visible": { "type": "boolean", "description": "Clearly deliberate playful facial grimace; false for ordinary smile, blink or unclear face." },
     "serious_index_pose_visible": { "type": "boolean", "description": "The main subject visibly raises an index finger near the face while making a neutral or serious expression; false if either part is unclear." },
+    "beard_absent_visible": { "type": "boolean", "description": "Clearly visible chin and cheeks without a beard; hidden or uncertain face means false." },
+    "muscular_visible": { "type": "boolean", "description": "Clearly visible developed musculature, not inferred from clothing or body weight." },
+    "non_muscular_visible": { "type": "boolean", "description": "Body is clearly visible without pronounced musculature; unknown means false. Mutually exclusive with muscular_visible." },
     "gentle_smile_visible": { "type": "boolean", "description": "A clearly visible small relaxed smile on the main subject; only an expression in this image, not a personality trait." },
     "relaxed_head_tilt_visible": { "type": "boolean", "description": "A clearly visible slight head tilt together with relaxed eyebrows on the main subject. Not camera rotation or a personality judgement." },
     "subculture_signals": {

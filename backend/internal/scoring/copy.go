@@ -9,6 +9,12 @@ import (
 // These are playful captions for the detected style, not claims about a person.
 // Specific visible details belong in the evidence, not in a random caption.
 var categorySummaries = map[string][]string{
+	"muscular": {
+		"Мышцы попали в кадр раньше, чем успели сказать «сыр».",
+		"У этого кадра есть рельеф. И это не фон.",
+		"Мышцы решили, что сегодня они главный аксессуар.",
+		"Хотели посмотреть на образ. Мышцы попросили отдельный кадр.",
+	},
 	"urban_classic": {
 		"Образ будто на встречу. Даже если встреча — с шаурмой.",
 		"У этого образа в календаре явно есть «важные дела».",
@@ -79,7 +85,7 @@ var categorySummaries = map[string][]string{
 
 func summaryForCategory(code string, f analysis.VisualFeatures) string {
 	// Keep this helper safe even if called with inconsistent category data.
-	if (code == "mula" && !(f.SkullcapVisible && f.BeardVisible)) ||
+	if (code == "muscular" && !f.MuscularVisible) || (code == "mula" && !(f.SkullcapVisible && f.BeardVisible)) ||
 		(code == "clown" && !f.PlayfulGrimace) ||
 		(code == "cool_pose" && !f.SeriousIndexPose) ||
 		(code == "pupsik" && !f.HasGentlePose()) {

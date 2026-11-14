@@ -23,3 +23,17 @@ func TestDecodeYandexFeaturesStillRejectsMissingVisualValues(t *testing.T) {
 		t.Fatal("missing scoring value was accepted")
 	}
 }
+
+func TestNewVisibleBodyCuesSurviveYandexDecoder(t *testing.T) {
+	input := strings.Replace(validJSON, `"person_count":1,`, `"person_count":1,"beard_absent_visible":true,"muscular_visible":true,`, 1)
+	f, err := DecodeYandexFeatures(strings.NewReader(input))
+	if err != nil || !f.BeardAbsentVisible || !f.MuscularVisible || f.NonMuscularVisible {
+		t.Fatalf("lost evidence: %+v %v", f, err)
+	}
+	for _, fields := range []string{`"beard_visible":true,"beard_absent_visible":true,`, `"muscular_visible":true,"non_muscular_visible":true,`} {
+		input = strings.Replace(validJSON, `"person_count":1,`, `"person_count":1,`+fields, 1)
+		if _, err := DecodeYandexFeatures(strings.NewReader(input)); err == nil {
+			t.Fatal("contradictory evidence accepted")
+		}
+	}
+}

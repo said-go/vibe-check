@@ -161,6 +161,12 @@ components:
           maxItems: 3
           items: { type: string }
           description: Visible cues contributing most to the selected category. Omitted when no grounded explanation is available, including manual presets.
+        components:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items: { $ref: '#/components/schemas/CategoryScore' }
+          description: Two independently supported categories of a mixed verdict. Primary code remains the leading category; its title is the combined display title. Omitted for single categories and manual presets.
         provisional: { type: boolean, description: Verdict is tentative because the image or visible evidence is limited. }
         assessment_note: { type: string, description: Short explanation of assessment limits. }
         assessment_scope:

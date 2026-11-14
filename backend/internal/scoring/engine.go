@@ -21,21 +21,22 @@ type Metrics struct {
 }
 
 type Result struct {
-	Status              string        `json:"status"`
-	PrimaryCategory     CategoryScore `json:"primary_category"`
-	SecondaryCategory   CategoryScore `json:"secondary_category"`
-	Level               string        `json:"level"`
-	LevelTitle          string        `json:"level_title"`
-	Score               int           `json:"score"`
-	Confidence          int           `json:"confidence"`
-	Metrics             Metrics       `json:"metrics"`
-	Summary             string        `json:"summary"`
-	Recommendations     []string      `json:"recommendations"`
-	Explanations        []string      `json:"explanations,omitempty"`
-	Provisional         bool          `json:"provisional,omitempty"`
-	AssessmentNote      string        `json:"assessment_note,omitempty"`
-	AssessmentScope     string        `json:"assessment_scope,omitempty"`
-	LowConfidenceReason string        `json:"low_confidence_reason,omitempty"`
+	Status              string          `json:"status"`
+	PrimaryCategory     CategoryScore   `json:"primary_category"`
+	SecondaryCategory   CategoryScore   `json:"secondary_category"`
+	Level               string          `json:"level"`
+	LevelTitle          string          `json:"level_title"`
+	Score               int             `json:"score"`
+	Confidence          int             `json:"confidence"`
+	Metrics             Metrics         `json:"metrics"`
+	Summary             string          `json:"summary"`
+	Recommendations     []string        `json:"recommendations"`
+	Explanations        []string        `json:"explanations,omitempty"`
+	Provisional         bool            `json:"provisional,omitempty"`
+	AssessmentNote      string          `json:"assessment_note,omitempty"`
+	AssessmentScope     string          `json:"assessment_scope,omitempty"`
+	Components          []CategoryScore `json:"components,omitempty"`
+	LowConfidenceReason string          `json:"low_confidence_reason,omitempty"`
 }
 
 type featureName string
@@ -48,10 +49,10 @@ type Engine struct{ rules []rule }
 
 func NewEngine() *Engine {
 	return &Engine{rules: []rule{
-		{Code: "urban_classic", Title: "Собранный", Weights: map[featureName]float64{"formality": .30, "coherence": .25, "classic": .25, "harmony": .15, "accessories": .05}},
-		{Code: "healthy_casual", Title: "Здравый стиль", Weights: map[featureName]float64{"coherence": .35, "harmony": .25, "sportiness": .15, "classic": .15, "originality": .10}},
+		{Code: "urban_classic", Title: "Бизнесмен", Weights: map[featureName]float64{"formality": .30, "coherence": .25, "classic": .25, "harmony": .15, "accessories": .05}},
+		{Code: "healthy_casual", Title: "Стиляга", Weights: map[featureName]float64{"coherence": .35, "harmony": .25, "sportiness": .15, "classic": .15, "originality": .10}},
 		{Code: "sport_chic", Title: "Спортик", Weights: map[featureName]float64{"sport_chic": .35, "sportiness": .30, "coherence": .20, "originality": .15}},
-		{Code: "streetwear", Title: "Уличный стиль", Weights: map[featureName]float64{"streetwear": .45, "originality": .25, "sportiness": .15, "accessories": .15}},
+		{Code: "streetwear", Title: "Абушка", Weights: map[featureName]float64{"streetwear": .45, "originality": .25, "sportiness": .15, "accessories": .15}},
 		{Code: "alternative", Title: "Нефор", Weights: map[featureName]float64{"alternative": .45, "originality": .20, "accessories": .10, "layering": .05, "unnatural_hair_color": .10, "piercing": .05, "hair_below_ears": .03, "hair_over_eyes": .02}},
 		{Code: "goth", Title: "Гот", Weights: map[featureName]float64{"goth": .45, "darkness": .30, "coherence": .15, "layering": .10}},
 		{Code: "retro_90s", Title: "Бандит 90-х", Weights: map[featureName]float64{"retro_90s": .70, "sportiness": .15, "accessories": .10, "originality": .05}},
@@ -71,6 +72,9 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 		for name, weight := range category.Weights {
 			score += float64(value(features, name)) * weight
 		}
+		if category.Code == "alternative" && features.HasAlternativeCombination() {
+			score += 40
+		}
 		ranked = append(ranked, CategoryScore{Code: category.Code, Title: category.Title, Score: clamp(int(math.Round(score)))})
 	}
 	sort.SliceStable(ranked, func(i, j int) bool {
@@ -79,6 +83,22 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 		}
 		return ranked[i].Score > ranked[j].Score
 	})
+	if features.OutfitVisibility == 0 && features.HasAlternativeCombination() {
+		for i, c := range ranked {
+			if c.Code == "alternative" {
+				ranked = append([]CategoryScore{c}, append(ranked[:i], ranked[i+1:]...)...)
+				break
+			}
+		}
+	}
+	if features.MuscularVisible {
+		muscle := CategoryScore{Code: "muscular", Title: "Качок", Score: 100}
+		if features.OutfitVisibility > 0 && strongOutfitStyle(features, ranked[0]) {
+			ranked = append(ranked[:1], append([]CategoryScore{muscle}, ranked[1:]...)...)
+		} else {
+			ranked = append([]CategoryScore{muscle}, ranked...)
+		}
+	}
 	if features.HasGentlePose() && (features.OutfitVisibility == 0 || !strongOutfitStyle(features, ranked[0])) {
 		ranked = append([]CategoryScore{{Code: "pupsik", Title: "Пупсик", Score: 100}}, ranked...)
 	}
@@ -99,6 +119,7 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 		Summary: summaryForCategory(ranked[0].Code, features), Recommendations: recommendationsForFeatures(features),
 		Explanations: e.explanations(ranked[0].Code, features),
 	}
+	e.mix(&result, ranked, features)
 	if features.OutfitVisibility < 60 || features.ImageQuality < 55 || features.Confidence < 70 {
 		result.Provisional = true
 		result.AssessmentNote = "Примерный вердикт: некоторые детали трудно разобрать."
@@ -124,6 +145,7 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 	if reason != "" {
 		result.Status = "low_confidence"
 		result.Explanations = nil
+		result.Components = nil
 		result.Provisional, result.AssessmentNote, result.AssessmentScope = false, "", ""
 		result.LowConfidenceReason = reason
 		result.PrimaryCategory = CategoryScore{}

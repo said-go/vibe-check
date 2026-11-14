@@ -35,7 +35,7 @@
     try { return await work(db); } finally { db.close(); }
   }
 
-  const displayCategory = title => title === 'Спорт-шик' ? 'Спортик' : title;
+  const displayCategory = title => ({'Спорт-шик':'Спортик','Собранный':'Бизнесмен','Здравый стиль':'Стиляга','Уличный стиль':'Абушка'}[title] || title);
 
   const list = () => withDatabase(async db => {
     const rows = await transaction(db, 'readonly', store => store.getAll());
