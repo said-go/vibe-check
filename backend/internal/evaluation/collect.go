@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 
 	"github.com/said-go/vibe-check/backend/internal/imageproc"
 	"github.com/said-go/vibe-check/backend/internal/vision"
@@ -36,9 +35,8 @@ func DecodeImages(r io.Reader) (ImageManifest, error) {
 	if d.Decode(&m) != nil || d.Decode(&struct{}{}) != io.EOF || len(m.Cases) < 1 || len(m.Cases) > 100 {
 		return m, errors.New("invalid manifest; expected 1..100 cases")
 	}
-	token := regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 	for i, c := range m.Cases {
-		valid := c.Path != "" && ((c.Expected.Status == "completed" && token.MatchString(c.Expected.Category) && c.Expected.Reason == "") || (c.Expected.Status == "low_confidence" && c.Expected.Category == "" && token.MatchString(c.Expected.Reason)))
+		valid := c.Path != "" && validExpected(c.Expected)
 		if !valid {
 			return m, fmt.Errorf("invalid manifest case %d", i+1)
 		}

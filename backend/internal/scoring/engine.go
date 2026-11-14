@@ -2,7 +2,6 @@ package scoring
 
 import (
 	"errors"
-	"math"
 	"sort"
 
 	"github.com/said-go/vibe-check/backend/internal/analysis"
@@ -42,20 +41,20 @@ type Result struct {
 type featureName string
 type rule struct {
 	Code, Title string
-	Weights     map[featureName]float64
+	Weights     map[featureName]int
 }
 
 type Engine struct{ rules []rule }
 
 func NewEngine() *Engine {
 	return &Engine{rules: []rule{
-		{Code: "urban_classic", Title: "Бизнесмен", Weights: map[featureName]float64{"formality": .30, "coherence": .25, "classic": .25, "harmony": .15, "accessories": .05}},
-		{Code: "healthy_casual", Title: "Стиляга", Weights: map[featureName]float64{"coherence": .35, "harmony": .25, "sportiness": .15, "classic": .15, "originality": .10}},
-		{Code: "sport_chic", Title: "Спортик", Weights: map[featureName]float64{"sport_chic": .35, "sportiness": .30, "coherence": .20, "originality": .15}},
-		{Code: "streetwear", Title: "Абушка", Weights: map[featureName]float64{"streetwear": .45, "originality": .25, "sportiness": .15, "accessories": .15}},
-		{Code: "alternative", Title: "Нефор", Weights: map[featureName]float64{"alternative": .45, "originality": .20, "accessories": .10, "layering": .05, "unnatural_hair_color": .10, "piercing": .05, "hair_below_ears": .03, "hair_over_eyes": .02}},
-		{Code: "goth", Title: "Гот", Weights: map[featureName]float64{"goth": .45, "darkness": .30, "coherence": .15, "layering": .10}},
-		{Code: "retro_90s", Title: "Бандит 90-х", Weights: map[featureName]float64{"retro_90s": .70, "sportiness": .15, "accessories": .10, "originality": .05}},
+		{Code: "urban_classic", Title: "Бизнесмен", Weights: map[featureName]int{"formality": 30, "coherence": 25, "classic": 25, "harmony": 15, "accessories": 5}},
+		{Code: "healthy_casual", Title: "Стиляга", Weights: map[featureName]int{"coherence": 35, "harmony": 25, "sportiness": 15, "classic": 15, "originality": 10}},
+		{Code: "sport_chic", Title: "Спортик", Weights: map[featureName]int{"sport_chic": 35, "sportiness": 30, "coherence": 20, "originality": 15}},
+		{Code: "streetwear", Title: "Абушка", Weights: map[featureName]int{"streetwear": 45, "originality": 25, "sportiness": 15, "accessories": 15}},
+		{Code: "alternative", Title: "Нефор", Weights: map[featureName]int{"alternative": 45, "originality": 20, "accessories": 10, "layering": 5, "unnatural_hair_color": 10, "piercing": 5, "hair_below_ears": 3, "hair_over_eyes": 2}},
+		{Code: "goth", Title: "Гот", Weights: map[featureName]int{"goth": 45, "darkness": 30, "coherence": 15, "layering": 10}},
+		{Code: "retro_90s", Title: "Бандит 90-х", Weights: map[featureName]int{"retro_90s": 70, "sportiness": 15, "accessories": 10, "originality": 5}},
 	}}
 }
 
@@ -68,14 +67,7 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 	}
 	ranked := make([]CategoryScore, 0, len(e.rules))
 	for _, category := range e.rules {
-		score := 0.0
-		for name, weight := range category.Weights {
-			score += float64(value(features, name)) * weight
-		}
-		if category.Code == "alternative" && features.HasAlternativeCombination() {
-			score += 40
-		}
-		ranked = append(ranked, CategoryScore{Code: category.Code, Title: category.Title, Score: clamp(int(math.Round(score)))})
+		ranked = append(ranked, CategoryScore{Code: category.Code, Title: category.Title, Score: categoryScore(features, category)})
 	}
 	sort.SliceStable(ranked, func(i, j int) bool {
 		if ranked[i].Score == ranked[j].Score {
@@ -114,7 +106,7 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 	if features.PlayfulGrimace {
 		ranked = append([]CategoryScore{{Code: "clown", Title: "Клоун", Score: 100}}, ranked...)
 	}
-	overall := clamp(int(math.Round(float64(features.OutfitCoherence)*.45 + float64(features.ColorHarmony)*.30 + float64(features.Originality)*.25)))
+	overall := roundWeightedScore(features.OutfitCoherence*45 + features.ColorHarmony*30 + features.Originality*25)
 	result := Result{
 		Status: "completed", PrimaryCategory: ranked[0], SecondaryCategory: ranked[1],
 		Level: level(overall).code, LevelTitle: level(overall).title, Score: overall, Confidence: features.Confidence,
@@ -285,4 +277,21 @@ func clamp(value int) int {
 		return 100
 	}
 	return value
+}
+
+// All weights are whole percentages. Integer addition is independent of Go map
+// iteration order; rounding happens once after bonuses, with exact halves up.
+func categoryScore(features analysis.VisualFeatures, category rule) int {
+	total := 0
+	for name, weight := range category.Weights {
+		total += value(features, name) * weight
+	}
+	if category.Code == "alternative" && features.HasAlternativeCombination() {
+		total += 40 * 100
+	}
+	return roundWeightedScore(total)
+}
+
+func roundWeightedScore(hundredths int) int {
+	return clamp((hundredths + 50) / 100)
 }

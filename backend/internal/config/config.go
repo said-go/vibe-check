@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/netip"
 	"net/url"
 	"os"
@@ -17,6 +18,7 @@ type Config struct {
 	SharedAnalysesPerHour   int64
 	TrustedProxyCIDRs       []netip.Prefix
 	Environment             string
+	LocalDiagnostics        bool
 	Address                 string
 	ReadTimeout             time.Duration
 	WriteTimeout            time.Duration
@@ -66,6 +68,13 @@ func Load() (Config, error) {
 		OpenAIBaseURL:           env("OPENAI_BASE_URL", "https://api.openai.com/v1"),
 		OpenAITimeout:           duration("OPENAI_TIMEOUT", 45*time.Second),
 	}
+	if raw := os.Getenv("LOCAL_DIAGNOSTICS"); raw != "" {
+		value, err := strconv.ParseBool(raw)
+		if err != nil {
+			return cfg, errors.New("LOCAL_DIAGNOSTICS must be a boolean")
+		}
+		cfg.LocalDiagnostics = value
+	}
 	if raw := strings.TrimSpace(os.Getenv("TRUSTED_PROXY_CIDRS")); raw != "" {
 		if len(raw) > 4096 {
 			return cfg, errors.New("TRUSTED_PROXY_CIDRS is too long")
@@ -82,6 +91,16 @@ func Load() (Config, error) {
 }
 
 func (c Config) Validate() error {
+	if c.LocalDiagnostics {
+		if c.Environment != "development" {
+			return errors.New("LOCAL_DIAGNOSTICS requires development environment")
+		}
+		host, _, err := net.SplitHostPort(c.Address)
+		ip, ipErr := netip.ParseAddr(host)
+		if err != nil || !strings.EqualFold(host, "localhost") && (ipErr != nil || !ip.Unmap().IsLoopback()) {
+			return errors.New("LOCAL_DIAGNOSTICS requires an explicit loopback HTTP_ADDRESS")
+		}
+	}
 	if c.RedisBudgetURL != "" {
 		u, err := url.Parse(c.RedisBudgetURL)
 		if err != nil || u.Hostname() == "" || (u.Scheme != "redis" && u.Scheme != "rediss") || u.RawQuery != "" || u.Fragment != "" || c.SharedAnalysesPerHour < 1 || c.SharedAnalysesPerHour > 1000000 || len(c.RedisBudgetKey) < 1 || len(c.RedisBudgetKey) > 128 {

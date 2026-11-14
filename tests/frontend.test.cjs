@@ -56,6 +56,81 @@ test('missing consent never uploads', async () => {
   await b.run('analyze()'); assert.equal(b.calls().length,0);
 });
 
+test('diagnostics requires server opt-in and explicit checkbox, never enters saved result', async () => {
+  const b=await browser();b.prepare();
+  const result={score:70,primary_category:{title:'Стиляга'},summary:'Тест',metrics:{coherence:70,originality:70,color_harmony:70}};
+  const diagnostics={available:true,source:'ai',features:{confidence:90},selected:[{title:'Стиляга'}],candidates:[{title:'Стиляга',score:70}],special_checks:[{title:'Герой боевика',eligible:false,requirements:[{label:'<img src=x onerror=alert(1)>',met:false}]}]};
+  b.setFetch(async url=>url.includes('readyz')?response({status:'ready',diagnostics_available:true}):response({status:'completed',analysis_id:'diag',result,diagnostics}));
+  await b.run('refreshAvailability()');assert.equal(b.node('#diagnostics-option').hidden,false);
+  await b.run('analyze()');assert.equal(b.calls().at(-1)[1].headers['X-Vibe-Diagnostics'],undefined);
+  assert.equal(b.node('#local-diagnostics').hidden,true);
+  b.node('#diagnostics-consent').checked=true;
+  await b.run('analyze()');assert.equal(b.calls().at(-1)[1].headers['X-Vibe-Diagnostics'],'1');
+  assert.equal(b.node('#local-diagnostics').hidden,false);
+  assert.equal(b.run('currentRecord.diagnostics'),undefined);
+  const texts=b.run(`(()=>{const walk=n=>[n.textContent,...n.children.map(walk)].join(' ');return walk($('#diagnostics-content'));})()`);
+  assert.ok(texts.includes('Не подтверждено — <img src=x onerror=alert(1)>'));
+  b.run("showStep('consent-step')");assert.equal(b.node('#local-diagnostics').hidden,true);assert.equal(b.node('#diagnostics-content').children.length,0);
+});
+
+test('invalid completed response never displays diagnostics and can be retried', async () => {
+  const b=await browser();b.prepare();b.node('#diagnostics-consent').checked=true;
+  const diagnostics={available:true,selected:[{title:'Стиляга'}],features:{confidence:90}};
+  let result={score:70};
+  b.setFetch(async url=>url.includes('readyz')?response({status:'ready',diagnostics_available:true}):response({status:'completed',analysis_id:'diag-retry',result,diagnostics}));
+  await b.run('analyze()');
+  assert.match(b.node('#error-description').textContent,/неверный ответ/);
+  assert.equal(b.node('#retry-analysis').hidden,false);
+  assert.equal(b.node('#local-diagnostics').hidden,true);
+  assert.equal(b.node('#diagnostics-content').children.length,0);
+  assert.equal(b.run('currentRecord'),null);
+  result={score:70,primary_category:{title:'Стиляга'},summary:'Тест',metrics:{coherence:70,originality:70,color_harmony:70}};
+  await b.run('analyze()');
+  assert.equal(b.node('#result-step').hidden,false);
+  assert.equal(b.node('#local-diagnostics').hidden,false);
+  const uploads=b.calls().filter(([url])=>url.endsWith('/analyses'));
+  assert.equal(uploads.length,2);
+  assert.equal(uploads[0][1].headers['Idempotency-Key'],uploads[1][1].headers['Idempotency-Key']);
+});
+
+test('malformed diagnostic array entries do not break a valid verdict', async () => {
+  const b=await browser();b.prepare();b.node('#diagnostics-consent').checked=true;
+  const result={score:70,primary_category:{title:'Стиляга'},summary:'Тест',metrics:{coherence:70,originality:70,color_harmony:70}};
+  const diagnostics={available:true,selected:[null,42,{title:'Стиляга'}],candidates:[null,false,{title:'Стиляга',score:70}],special_checks:[null,'invalid',{title:'Герой боевика',eligible:false,requirements:[null,5,{label:'Борода',met:true}]}]};
+  b.setFetch(async url=>url.includes('readyz')?response({status:'ready',diagnostics_available:true}):response({status:'completed',analysis_id:'malformed-diag',result,diagnostics}));
+  await b.run('analyze()');
+  assert.equal(b.node('#result-step').hidden,false);
+  assert.equal(b.node('#error-step').hidden,true);
+  assert.equal(b.node('#local-diagnostics').hidden,false);
+  assert.equal(b.run('currentRecord.id'),'malformed-diag');
+  assert.equal(b.run('currentRecord.diagnostics'),undefined);
+  const texts=b.run(`(()=>{const walk=n=>[n.textContent,...n.children.map(walk)].join(' ');return walk($('#diagnostics-content'));})()`);
+  assert.ok(texts.includes('Стиляга: 70/100'));
+  assert.ok(texts.includes('Подтверждено — Борода'));
+});
+
+test('disabled diagnostics cannot be requested by checking a stale checkbox', async () => {
+  const b=await browser();b.prepare();b.node('#diagnostics-consent').checked=true;
+  b.setFetch(async url=>url.includes('readyz')?response({status:'ready',diagnostics_available:false}):response({status:'low_confidence',analysis_id:'low',result:{low_confidence_reason:'ai_confidence_too_low'}}));
+  await b.run('analyze()');assert.equal(b.calls().at(-1)[1].headers['X-Vibe-Diagnostics'],undefined);
+  assert.equal(b.node('#diagnostics-option').hidden,true);assert.equal(b.node('#diagnostics-consent').checked,false);
+});
+
+test('diagnostics explains low-confidence results and clears on closing the photo', async () => {
+  const b=await browser();b.prepare();b.node('#diagnostics-consent').checked=true;
+  b.setFetch(async url=>url.includes('readyz')?response({status:'ready',diagnostics_available:true}):response({status:'low_confidence',analysis_id:'low',result:{low_confidence_reason:'ai_confidence_too_low'},diagnostics:{available:true,source:'ai',low_confidence_reason:'ai_confidence_too_low'}}));
+  await b.run('analyze()');assert.equal(b.node('#local-diagnostics').hidden,false);assert.equal(b.node('#error-step').hidden,false);
+  b.run('closeModal()');assert.equal(b.node('#local-diagnostics').hidden,true);assert.equal(b.node('#diagnostics-content').children.length,0);
+});
+
+test('preset and unrecorded diagnostics do not invent recognized features', async () => {
+  const b=await browser();
+  b.run("renderDiagnostics({available:false,source:'preset'})");
+  assert.match(b.node('#diagnostics-content').children[0].textContent,/заранее заданный/);
+  b.run("renderDiagnostics({available:false,source:'not_recorded'})");
+  assert.match(b.node('#diagnostics-content').children[0].textContent,/без диагностики/);
+});
+
 test('legacy level titles never appear in history or shared text', async () => {
   const b = await browser();
   const text = b.run(`(() => {

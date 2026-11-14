@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Unbounded:wght@600;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="assets/styles.77d2a1246655dd3a.css" />
+  <link rel="stylesheet" href="assets/styles.f390c6680867bc56.css" />
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
@@ -117,6 +117,7 @@
           <div class="consent-copy">
             <p id="consent-description">Посмотрим фото и покажем результат. Для AI-анализа очищенная копия отправляется в Yandex AI Studio. Наш сервер не хранит фото.</p>
             <label class="consent-label"><input type="checkbox" id="privacy-consent" /> <span id="consent-label-text">Согласен на обработку фото и, если потребуется, отправку в Yandex AI Studio</span></label>
+            <label class="consent-label" id="diagnostics-option" hidden><input type="checkbox" id="diagnostics-consent" /> <span>Показать диагностику этого запроса — только локально</span></label>
             <p class="camera-error" id="consent-error" role="alert"></p>
             <div class="modal-actions"><button class="btn btn-primary" id="start-analysis" disabled>Узнать вайб</button><button class="btn btn-ghost" id="choose-again">Другое фото</button></div>
           </div>
@@ -146,6 +147,11 @@
           <p class="share-note" id="share-note" aria-live="polite"></p>
         </div>
       </div>
+      <details class="local-diagnostics" id="local-diagnostics" hidden>
+        <summary>Диагностика этого анализа</summary>
+        <p>Только для локальной проверки. В историю и карточку эти данные не попадают. «Не подтверждено» может означать, что признак не удалось разглядеть.</p>
+        <div id="diagnostics-content"></div>
+      </details>
       <canvas id="canvas" hidden></canvas>
     </div>
   </div>
@@ -153,6 +159,6 @@
   <footer><span>ВАЙБЧЕК © 2026</span><span>НЕ ВОСПРИНИМАЙ ВСЕРЬЁЗ · ТЫ УЖЕ ХОРОШ</span></footer>
   <script src="assets/history.f618d55ed7bb2e77.js"></script>
   <script src="assets/share-card.be4b53e290906c3c.js"></script>
-  <script src="assets/app.425112762acac8af.js"></script>
+  <script src="assets/app.f78db976473fdb47.js"></script>
 </body>
 </html>

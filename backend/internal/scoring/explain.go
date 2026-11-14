@@ -61,13 +61,13 @@ func (e *Engine) explanations(code string, f analysis.VisualFeatures) []string {
 	}
 	type evidence struct {
 		name         featureName
-		contribution float64
+		contribution int
 	}
 	items := make([]evidence, 0)
 	for name, weight := range e.ruleByCode(code).Weights {
 		// Weak model signals are insufficient to make a positive claim.
 		if v := value(f, name); v >= 50 && weight > 0 {
-			items = append(items, evidence{name, float64(v) * weight})
+			items = append(items, evidence{name, v * weight})
 		}
 	}
 	sort.Slice(items, func(i, j int) bool {

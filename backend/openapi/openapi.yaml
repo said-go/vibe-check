@@ -35,6 +35,10 @@ paths:
       description: Sanitizes one JPEG or PNG in memory after explicit consent. Approved exact photos receive an owner-defined result after visual verification; other images go to the configured AI provider for outfit scoring. The image is not persisted by this server. Duplicate or unexpected fields are rejected.
       parameters:
         - in: header
+          name: X-Vibe-Diagnostics
+          description: Optional private development diagnostics. Requires LOCAL_DIAGNOSTICS=true, a loopback listener and direct loopback connection with a local Host; forwarded and cross-origin requests are denied. Never available in production. Snapshots contain normalized evidence only and are not included in ordinary retries.
+          schema: { type: string, enum: ['1'] }
+        - in: header
           name: X-Request-ID
           schema: { type: string, minLength: 8, maxLength: 80 }
         - in: header
@@ -67,6 +71,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/AnalysisResponse' }
         '400': { description: Invalid multipart request, duplicate or unexpected field. }
+        '403': { description: Requested private diagnostics are disabled or the request is not a direct local development request. }
         '409': { description: Idempotency key was reused with a different image. }
         '413': { description: Request body is too large. }
         '415': { description: Only JPEG and PNG are supported. }
@@ -89,6 +94,7 @@ components:
       properties:
         status: { type: string }
         ai_available: { type: boolean }
+        diagnostics_available: { type: boolean, description: Private diagnostics are enabled and accessible to this direct local request. }
         presets_available: { type: boolean }
         shared_budget_configured: { type: boolean }
         shared_budget_available: { type: boolean, description: 'True when no shared budget is required, or its non-consuming connectivity check succeeds.' }
@@ -174,6 +180,37 @@ components:
           enum: [portrait]
           description: Portrait-only verdict. Outfit score and metrics are zero placeholders and must not be displayed as ratings; level and secondary category are empty. Omitted for outfit assessments.
         low_confidence_reason: { type: string }
+    DiagnosticRequirement:
+      type: object
+      required: [feature, label, met]
+      properties:
+        feature: { type: string }
+        label: { type: string }
+        met: { type: boolean, description: False means not confirmed; the cue may be invisible or uncertain. }
+    DiagnosticCheck:
+      type: object
+      required: [code, title, eligible, requirements, note]
+      properties:
+        code: { type: string }
+        title: { type: string }
+        eligible: { type: boolean, description: Cue combination met; priorities and quality gates can still prevent selection. }
+        requirements: { type: array, items: { $ref: '#/components/schemas/DiagnosticRequirement' } }
+        note: { type: string }
+    Diagnostic:
+      type: object
+      required: [available, source, provisional]
+      properties:
+        available: { type: boolean }
+        source: { type: string, enum: [ai, preset, not_recorded] }
+        features:
+          type: object
+          description: Normalized VisualFeatures fields; dominant_colors is always null to avoid echoing unconstrained provider text. Never contains photos, keys or raw provider bodies.
+        candidates: { type: array, items: { $ref: '#/components/schemas/CategoryScore' } }
+        special_checks: { type: array, items: { $ref: '#/components/schemas/DiagnosticCheck' } }
+        selected: { type: array, items: { $ref: '#/components/schemas/CategoryScore' } }
+        provisional: { type: boolean }
+        assessment_note: { type: string }
+        low_confidence_reason: { type: string }
     AnalysisResponse:
       type: object
       required: [analysis_id, status, result, privacy]
@@ -181,6 +218,7 @@ components:
         analysis_id: { type: string }
         status: { type: string, enum: [completed, low_confidence] }
         result: { $ref: '#/components/schemas/ScoringResult' }
+        diagnostics: { $ref: '#/components/schemas/Diagnostic', description: Only for an explicitly authorized private diagnostic request. Not persisted beyond the short in-memory retry cache. }
         privacy:
           type: object
           additionalProperties: false

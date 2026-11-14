@@ -57,7 +57,8 @@
           "classic": 10,
           "sport_chic": 0
         },
-        "gentle_smile_visible": true, "relaxed_head_tilt_visible": true
+        "gentle_smile_visible": true,
+        "relaxed_head_tilt_visible": true
       },
       "expected": {
         "status": "completed",
@@ -158,6 +159,355 @@
         "status": "low_confidence",
         "category": "",
         "reason": "ai_confidence_too_low"
+      }
+    },
+    {
+      "id": "synthetic-action-hero",
+      "features": {
+        "contract_version": "1.0.0",
+        "dominant_colors": [],
+        "color_harmony": 60,
+        "darkness": 10,
+        "formality": 10,
+        "sportiness": 10,
+        "originality": 20,
+        "outfit_coherence": 60,
+        "accessory_intensity": 10,
+        "layering": 10,
+        "traditional_elements": 0,
+        "image_quality": 80,
+        "outfit_visibility": 80,
+        "confidence": 80,
+        "person_count": 1,
+        "subculture_signals": {
+          "goth": 0,
+          "alternative": 0,
+          "streetwear": 0,
+          "classic": 10,
+          "sport_chic": 0
+        },
+        "short_hair_or_bald_visible": true,
+        "head_scar_visible": true,
+        "beard_visible": true
+      },
+      "expected": {
+        "status": "completed",
+        "category": "action_hero"
+      }
+    },
+    {
+      "id": "synthetic-action-hero-muscular",
+      "features": {
+        "contract_version": "1.0.0",
+        "dominant_colors": [],
+        "color_harmony": 60,
+        "darkness": 10,
+        "formality": 10,
+        "sportiness": 10,
+        "originality": 20,
+        "outfit_coherence": 60,
+        "accessory_intensity": 10,
+        "layering": 10,
+        "traditional_elements": 0,
+        "image_quality": 80,
+        "outfit_visibility": 80,
+        "confidence": 80,
+        "person_count": 1,
+        "subculture_signals": {
+          "goth": 0,
+          "alternative": 0,
+          "streetwear": 0,
+          "classic": 10,
+          "sport_chic": 0
+        },
+        "short_hair_or_bald_visible": true,
+        "head_scar_visible": true,
+        "beard_visible": true,
+        "muscular_visible": true
+      },
+      "expected": {
+        "status": "completed",
+        "category": "action_hero",
+        "components": [
+          "action_hero",
+          "muscular"
+        ]
+      }
+    },
+    {
+      "id": "synthetic-alternative-muscular",
+      "features": {
+        "contract_version": "1.0.0",
+        "dominant_colors": [],
+        "color_harmony": 60,
+        "darkness": 10,
+        "formality": 10,
+        "sportiness": 10,
+        "originality": 100,
+        "outfit_coherence": 60,
+        "accessory_intensity": 100,
+        "layering": 10,
+        "traditional_elements": 0,
+        "image_quality": 80,
+        "outfit_visibility": 80,
+        "confidence": 80,
+        "person_count": 1,
+        "subculture_signals": {
+          "goth": 0,
+          "alternative": 100,
+          "streetwear": 0,
+          "classic": 10,
+          "sport_chic": 0
+        },
+        "muscular_visible": true
+      },
+      "expected": {
+        "status": "completed",
+        "category": "alternative",
+        "components": [
+          "alternative",
+          "muscular"
+        ]
+      }
+    },
+    {
+      "id": "synthetic-portrait-action-hero-muscular",
+      "features": {
+        "contract_version": "1.0.0",
+        "dominant_colors": [],
+        "color_harmony": 60,
+        "darkness": 10,
+        "formality": 10,
+        "sportiness": 10,
+        "originality": 20,
+        "outfit_coherence": 60,
+        "accessory_intensity": 10,
+        "layering": 10,
+        "traditional_elements": 0,
+        "image_quality": 80,
+        "outfit_visibility": 0,
+        "confidence": 80,
+        "person_count": 1,
+        "subculture_signals": {
+          "goth": 0,
+          "alternative": 0,
+          "streetwear": 0,
+          "classic": 10,
+          "sport_chic": 0
+        },
+        "short_hair_or_bald_visible": true,
+        "head_scar_visible": true,
+        "beard_visible": true,
+        "muscular_visible": true
+      },
+      "expected": {
+        "status": "completed",
+        "category": "action_hero",
+        "components": [
+          "action_hero",
+          "muscular"
+        ]
+      }
+    },
+    {
+      "id": "synthetic-group-does-not-blend",
+      "features": {
+        "contract_version": "1.0.0",
+        "dominant_colors": [],
+        "color_harmony": 60,
+        "darkness": 10,
+        "formality": 10,
+        "sportiness": 10,
+        "originality": 20,
+        "outfit_coherence": 60,
+        "accessory_intensity": 10,
+        "layering": 10,
+        "traditional_elements": 0,
+        "image_quality": 80,
+        "outfit_visibility": 80,
+        "confidence": 80,
+        "person_count": 2,
+        "subculture_signals": {
+          "goth": 0,
+          "alternative": 0,
+          "streetwear": 0,
+          "classic": 10,
+          "sport_chic": 0
+        },
+        "short_hair_or_bald_visible": true,
+        "head_scar_visible": true,
+        "beard_visible": true,
+        "muscular_visible": true
+      },
+      "expected": {
+        "status": "low_confidence",
+        "category": "",
+        "reason": "single_person_required"
+      }
+    },
+    {
+      "id": "synthetic-smile-alone",
+      "features": {
+        "contract_version": "1.0.0",
+        "dominant_colors": [],
+        "color_harmony": 60,
+        "darkness": 10,
+        "formality": 10,
+        "sportiness": 10,
+        "originality": 20,
+        "outfit_coherence": 60,
+        "accessory_intensity": 10,
+        "layering": 10,
+        "traditional_elements": 0,
+        "image_quality": 80,
+        "outfit_visibility": 80,
+        "confidence": 80,
+        "person_count": 1,
+        "subculture_signals": {
+          "goth": 0,
+          "alternative": 0,
+          "streetwear": 0,
+          "classic": 10,
+          "sport_chic": 0
+        },
+        "gentle_smile_visible": true
+      },
+      "expected": {
+        "status": "completed",
+        "category": "healthy_casual"
+      }
+    },
+    {
+      "id": "synthetic-action-hero-missing-scar",
+      "features": {
+        "contract_version": "1.0.0",
+        "dominant_colors": [],
+        "color_harmony": 60,
+        "darkness": 10,
+        "formality": 10,
+        "sportiness": 10,
+        "originality": 20,
+        "outfit_coherence": 60,
+        "accessory_intensity": 10,
+        "layering": 10,
+        "traditional_elements": 0,
+        "image_quality": 80,
+        "outfit_visibility": 80,
+        "confidence": 80,
+        "person_count": 1,
+        "subculture_signals": {
+          "goth": 0,
+          "alternative": 0,
+          "streetwear": 0,
+          "classic": 10,
+          "sport_chic": 0
+        },
+        "short_hair_or_bald_visible": true,
+        "beard_visible": true
+      },
+      "expected": {
+        "status": "completed",
+        "category": "healthy_casual"
+      }
+    },
+    {
+      "id": "synthetic-styles-gap-15",
+      "features": {
+        "contract_version": "1.0.0",
+        "dominant_colors": [],
+        "color_harmony": 60,
+        "darkness": 100,
+        "formality": 10,
+        "sportiness": 10,
+        "originality": 100,
+        "outfit_coherence": 67,
+        "accessory_intensity": 100,
+        "layering": 100,
+        "traditional_elements": 0,
+        "image_quality": 80,
+        "outfit_visibility": 80,
+        "confidence": 80,
+        "person_count": 1,
+        "subculture_signals": {
+          "goth": 100,
+          "alternative": 100,
+          "streetwear": 0,
+          "classic": 10,
+          "sport_chic": 0
+        }
+      },
+      "expected": {
+        "status": "completed",
+        "category": "goth",
+        "components": [
+          "goth",
+          "alternative"
+        ]
+      }
+    },
+    {
+      "id": "synthetic-styles-gap-16",
+      "features": {
+        "contract_version": "1.0.0",
+        "dominant_colors": [],
+        "color_harmony": 60,
+        "darkness": 100,
+        "formality": 10,
+        "sportiness": 10,
+        "originality": 100,
+        "outfit_coherence": 74,
+        "accessory_intensity": 100,
+        "layering": 100,
+        "traditional_elements": 0,
+        "image_quality": 80,
+        "outfit_visibility": 80,
+        "confidence": 80,
+        "person_count": 1,
+        "subculture_signals": {
+          "goth": 100,
+          "alternative": 100,
+          "streetwear": 0,
+          "classic": 10,
+          "sport_chic": 0
+        }
+      },
+      "expected": {
+        "status": "completed",
+        "category": "goth"
+      }
+    },
+    {
+      "id": "synthetic-weak-alternative-does-not-blend",
+      "features": {
+        "contract_version": "1.0.0",
+        "dominant_colors": [],
+        "color_harmony": 60,
+        "darkness": 10,
+        "formality": 10,
+        "sportiness": 10,
+        "originality": 20,
+        "outfit_coherence": 60,
+        "accessory_intensity": 10,
+        "layering": 10,
+        "traditional_elements": 0,
+        "image_quality": 80,
+        "outfit_visibility": 80,
+        "confidence": 80,
+        "person_count": 1,
+        "subculture_signals": {
+          "goth": 0,
+          "alternative": 50,
+          "streetwear": 0,
+          "classic": 10,
+          "sport_chic": 0
+        },
+        "short_hair_or_bald_visible": true,
+        "head_scar_visible": true,
+        "beard_visible": true
+      },
+      "expected": {
+        "status": "completed",
+        "category": "action_hero"
       }
     }
   ]

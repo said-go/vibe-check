@@ -30,6 +30,8 @@ type idempotencyEntry struct {
 
 type analysisOutcome struct {
 	result        scoring.Result
+	diagnostics   *scoring.Diagnostic
+	preset        bool
 	analysisID    string
 	visionErr     error
 	scoringFailed bool

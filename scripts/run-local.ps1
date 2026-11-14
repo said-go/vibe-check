@@ -1,3 +1,5 @@
+param([switch]$Diagnostics)
+
 $ErrorActionPreference = 'Stop'
 $backendRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\backend')).Path
 $envFile = Join-Path $backendRoot '.env'
@@ -12,6 +14,12 @@ foreach ($line in [System.IO.File]::ReadAllLines($envFile)) {
 }
 
 $privatePresets = Join-Path $backendRoot 'private\photo-presets.json'
+if ($Diagnostics) {
+    if ($env:APP_ENV -and $env:APP_ENV -ne 'development') { throw 'Diagnostics requires APP_ENV=development.' }
+    $env:APP_ENV = 'development'
+    $env:LOCAL_DIAGNOSTICS = 'true'
+    $env:HTTP_ADDRESS = '127.0.0.1:8080'
+}
 if (-not $env:PHOTO_PRESETS_FILE -and (Test-Path -LiteralPath $privatePresets)) {
     $env:PHOTO_PRESETS_FILE = $privatePresets
 }

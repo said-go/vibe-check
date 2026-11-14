@@ -21,7 +21,7 @@ func fixture(t *testing.T) Dataset {
 }
 func TestSyntheticExamples(t *testing.T) {
 	r := Run(fixture(t))
-	if r.Total != 5 || r.Passed != 5 || r.Failed != 0 {
+	if r.Total != 15 || r.Passed != 15 || r.Failed != 0 {
 		t.Fatalf("%+v", r)
 	}
 }
@@ -30,7 +30,7 @@ func TestWrongExpectationAndInvalidContractAreFailures(t *testing.T) {
 	d.Cases[0].Expected.Category = "goth"
 	d.Cases[1].Features = json.RawMessage(`{}`)
 	r := Run(d)
-	if r.Failed != 2 || r.Invalid != 1 || r.Passed != 3 {
+	if r.Failed != 2 || r.Invalid != 1 || r.Passed != len(d.Cases)-2 {
 		t.Fatalf("%+v", r)
 	}
 	if r.Outcomes[0].Actual.Category != "healthy_casual" || r.Outcomes[1].Error == "" {

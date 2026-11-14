@@ -126,3 +126,37 @@ func TestDirectoryCLI(t *testing.T) {
 		t.Fatalf("invalid file: %d %s", code, e)
 	}
 }
+
+func TestCLIFailsWhenLegacySingleExpectationGetsMixedResult(t *testing.T) {
+	raw, err := os.ReadFile("../../internal/evaluation/testdata/synthetic.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := evaluation.Decode(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var selected evaluation.Case
+	for _, c := range d.Cases {
+		if c.ID == "synthetic-action-hero-muscular" {
+			selected = c
+		}
+	}
+	if selected.ID == "" {
+		t.Fatal("mixed fixture missing")
+	}
+	selected.Expected.Components = nil
+	d.Cases = []evaluation.Case{selected}
+	raw, _ = json.Marshal(d)
+	file := filepath.Join(t.TempDir(), "mixed.json")
+	if err = os.WriteFile(file, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	var out, diagnostic bytes.Buffer
+	if code := run([]string{"-input", file}, &out, &diagnostic); code != 1 {
+		t.Fatalf("exit %d, %s", code, diagnostic.String())
+	}
+	if !strings.Contains(out.String(), "unexpected=[muscular]") || !strings.Contains(out.String(), "action_hero+muscular") {
+		t.Fatalf("missing mixed diagnosis: %s", out.String())
+	}
+}

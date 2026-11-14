@@ -20,15 +20,16 @@ import (
 )
 
 type Server struct {
-	logger          *slog.Logger
-	engine          *scoring.Engine
-	vision          vision.Provider
-	images          imageproc.Processor
-	maxRequestBytes int64
-	configured      bool
-	limiter         *requestLimiter
-	idempotency     *idempotencyCache
-	presets         PhotoPresets
+	logger           *slog.Logger
+	engine           *scoring.Engine
+	vision           vision.Provider
+	images           imageproc.Processor
+	maxRequestBytes  int64
+	configured       bool
+	limiter          *requestLimiter
+	idempotency      *idempotencyCache
+	presets          PhotoPresets
+	localDiagnostics bool
 }
 
 func New(logger *slog.Logger, maxRequestBytes int64, provider vision.Provider) http.Handler {
@@ -40,6 +41,12 @@ func NewWithLimits(logger *slog.Logger, maxRequestBytes int64, provider vision.P
 }
 
 func NewWithPresets(logger *slog.Logger, maxRequestBytes int64, provider vision.Provider, limits Limits, presets PhotoPresets) http.Handler {
+	return NewWithPresetsAndDiagnostics(logger, maxRequestBytes, provider, limits, presets, false)
+}
+
+// NewWithPresetsAndDiagnostics is for an explicitly enabled loopback development server.
+// Production callers must leave diagnostics disabled (config.Validate enforces this).
+func NewWithPresetsAndDiagnostics(logger *slog.Logger, maxRequestBytes int64, provider vision.Provider, limits Limits, presets PhotoPresets, localDiagnostics bool) http.Handler {
 	if provider == nil {
 		provider = vision.Unconfigured{}
 	}
@@ -50,6 +57,7 @@ func NewWithPresets(logger *slog.Logger, maxRequestBytes int64, provider vision.
 	}
 	server := &Server{logger: logger, engine: scoring.NewEngine(), vision: provider, images: imageproc.New(), maxRequestBytes: maxRequestBytes, configured: configured, limiter: newRequestLimiter(limits), idempotency: newIdempotencyCache()}
 	server.presets = append(PhotoPresets(nil), presets...)
+	server.localDiagnostics = localDiagnostics
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", server.health)
 	mux.HandleFunc("GET /readyz", server.ready)
@@ -73,19 +81,24 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, code, map[string]any{"status": status, "ai_available": aiAvailable, "presets_available": len(s.presets) > 0,
-		"shared_budget_configured": shared != nil, "shared_budget_available": budgetAvailable})
+		"shared_budget_configured": shared != nil, "shared_budget_available": budgetAvailable, "diagnostics_available": s.diagnosticsAllowed(r)})
 }
 
 type analysisResponse struct {
-	AnalysisID string         `json:"analysis_id"`
-	Status     string         `json:"status"`
-	Result     scoring.Result `json:"result"`
-	Privacy    struct {
+	AnalysisID  string              `json:"analysis_id"`
+	Status      string              `json:"status"`
+	Result      scoring.Result      `json:"result"`
+	Diagnostics *scoring.Diagnostic `json:"diagnostics,omitempty"`
+	Privacy     struct {
 		ServerImageStored bool `json:"server_image_stored"`
 	} `json:"privacy"`
 }
 
 func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
+	if len(r.Header.Values(diagnosticHeader)) > 0 && (!requestedDiagnostics(r) || !s.diagnosticsAllowed(r)) {
+		s.writeError(w, r, http.StatusForbidden, "diagnostics_forbidden", "Local diagnostics are not available for this request", false)
+		return
+	}
 	mediaType, _, typeErr := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if typeErr != nil || mediaType != "multipart/form-data" {
 		s.writeError(w, r, http.StatusUnsupportedMediaType, "unsupported_media_type", "Content-Type must be multipart/form-data", false)
@@ -225,7 +238,7 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 		s.writeAnalysisOutcome(w, r, outcome)
 	}
 	if result, ok := s.presets.match(r.Header.Get("X-Original-Image-SHA256"), sanitized.JPEG); ok {
-		complete(analysisOutcome{result: result, analysisID: requestIDFrom(r)})
+		complete(analysisOutcome{result: result, analysisID: requestIDFrom(r), preset: true})
 		return
 	}
 	if !s.configured {
@@ -281,7 +294,11 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 		complete(analysisOutcome{scoringFailed: true})
 		return
 	}
-	complete(analysisOutcome{result: result, analysisID: requestIDFrom(r)})
+	outcome := analysisOutcome{result: result, analysisID: requestIDFrom(r)}
+	if requestedDiagnostics(r) && s.diagnosticsAllowed(r) {
+		outcome.diagnostics = s.engine.Diagnose(features, result)
+	}
+	complete(outcome)
 }
 
 func (s *Server) writeAnalysisOutcome(w http.ResponseWriter, r *http.Request, outcome analysisOutcome) {
@@ -305,6 +322,16 @@ func (s *Server) writeAnalysisOutcome(w http.ResponseWriter, r *http.Request, ou
 		analysisID = requestIDFrom(r)
 	}
 	response := analysisResponse{AnalysisID: analysisID, Status: outcome.result.Status, Result: outcome.result}
+	if requestedDiagnostics(r) && s.diagnosticsAllowed(r) {
+		response.Diagnostics = outcome.diagnostics
+		if response.Diagnostics == nil {
+			source := "not_recorded"
+			if outcome.preset {
+				source = "preset"
+			}
+			response.Diagnostics = &scoring.Diagnostic{Source: source}
+		}
+	}
 	response.Privacy.ServerImageStored = false
 	writeJSON(w, http.StatusOK, response)
 }

@@ -75,7 +75,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		w.Flush()
 		for _, o := range report.Outcomes {
 			if !o.Passed {
-				fmt.Fprintf(stdout, "FAIL %q expected=%+v actual=%+v error=%s\n", o.ID, o.Expected, o.Actual, o.Error)
+				fmt.Fprintf(stdout, "FAIL %q expected=%+v actual=%+v missing=%v unexpected=%v order_mismatch=%t error=%s\n", o.ID, o.Expected, o.Actual, o.MissingComponents, o.UnexpectedComponents, o.ComponentOrderMismatch, o.Error)
 			}
 		}
 	}

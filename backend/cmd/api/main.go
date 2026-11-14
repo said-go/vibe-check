@@ -44,11 +44,11 @@ func main() {
 		sharedBudget = budget
 		logger.Info("shared_provider_budget_configured", "calls_per_hour", cfg.SharedAnalysesPerHour)
 	}
-	api := httpapi.NewWithPresets(logger, cfg.MaxRequestBytes, provider, httpapi.Limits{
+	api := httpapi.NewWithPresetsAndDiagnostics(logger, cfg.MaxRequestBytes, provider, httpapi.Limits{
 		SharedBudget: sharedBudget,
 		PerHour:      int(cfg.AnalysesPerHour), PerClientMinute: int(cfg.AnalysesPerClientMinute), Concurrent: int(cfg.MaxConcurrentAnalyses),
 		TrustedProxyCIDRs: cfg.TrustedProxyCIDRs,
-	}, presets)
+	}, presets, cfg.LocalDiagnostics)
 	mux := http.NewServeMux()
 	mux.Handle("/api/", http.StripPrefix("/api", api))
 	mux.Handle("/", http.FileServer(http.Dir(cfg.FrontendDir)))

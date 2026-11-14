@@ -23,6 +23,7 @@ let availabilityGeneration = 0;
 let lastPhotoSource = 'file';
 let retryTimer = null;
 let retryUntil = 0;
+let diagnosticsAvailable = false;
 const API_BASE = (window.VIBE_API_BASE_URL || '/api').replace(/\/$/, '');
 const MAX_UPLOAD_BYTES = 2.5 * 1024 * 1024;
 const MAX_DECODED_PIXELS = 100 * 1000 * 1000;
@@ -67,13 +68,14 @@ function blobDataURL(blob) {
 }
 
 function showStep(id) {
+  if (!['error-step', 'result-step'].includes(id)) clearDiagnostics();
   steps.forEach(step => { $(`#${step}`).hidden = step !== id; });
   const heading = $(`#${id} h2`);
   modal.setAttribute('aria-labelledby', heading.id);
   heading.focus();
 }
 function cancelRequest() { requestGeneration++; activeRequest?.abort(); activeRequest = null; clearInterval(retryTimer); retryTimer = null; retryUntil = 0; $('#retry-analysis').disabled = false; $('#retry-analysis').textContent = 'Попробовать ещё раз'; }
-function clearPhoto() { photoGeneration++; currentFile = null; currentOriginalHash = ''; currentImage = ''; analysisKey = ''; currentRecord = null; currentCardBlob = null; $('#consent-image').removeAttribute('src'); $('#analysis-image').removeAttribute('src'); $('#result-image').removeAttribute('src'); canvas.width = 0; canvas.height = 0; }
+function clearPhoto() { photoGeneration++; currentFile = null; currentOriginalHash = ''; currentImage = ''; analysisKey = ''; currentRecord = null; currentCardBlob = null; clearDiagnostics(); $('#diagnostics-consent').checked = false; $('#consent-image').removeAttribute('src'); $('#analysis-image').removeAttribute('src'); $('#result-image').removeAttribute('src'); canvas.width = 0; canvas.height = 0; }
 
 function openModal(withCamera = true, returnFocus = document.activeElement) {
   focusBeforeModal = returnFocus;
@@ -276,11 +278,66 @@ async function analysisReady(signal) {
     signal?.removeEventListener('abort', abort);
   }
 }
+function setDiagnosticsAvailability(ready) {
+  diagnosticsAvailable = ready?.diagnostics_available === true;
+  $('#diagnostics-option').hidden = !diagnosticsAvailable;
+  if (!diagnosticsAvailable) $('#diagnostics-consent').checked = false;
+}
+function clearDiagnostics() {
+  $('#local-diagnostics').hidden = true;
+  $('#local-diagnostics').open = false;
+  $('#diagnostics-content').replaceChildren();
+}
+function renderDiagnostics(data) {
+  clearDiagnostics();
+  if (!data || typeof data !== 'object') return;
+  const container = $('#diagnostics-content');
+  const line = (parent, tag, value) => {
+    const item = document.createElement(tag);
+    item.textContent = String(value || '').slice(0, tag === 'pre' ? 10000 : 1000);
+    parent.append(item); return item;
+  };
+  if (data.available !== true) {
+    line(container, 'p', data.source === 'preset'
+      ? 'Для этого снимка использован заранее заданный ответ. Распознавание AI не запускалось.'
+      : 'Этот результат получен без диагностики. Чтобы проверить признаки, выбери фото заново и включи диагностику перед анализом. Новый анализ может расходовать лимит AI.');
+    $('#local-diagnostics').hidden = false; return;
+  }
+  const selected = Array.isArray(data.selected) ? data.selected : [];
+  line(container, 'h3', 'Выбранные категории');
+  line(container, 'p', selected.map(c => c?.title).filter(t => typeof t === 'string').join(' + ') || 'Категория не выбрана');
+  if (data.provisional) line(container, 'p', data.assessment_note || 'Предварительный результат');
+  if (data.low_confidence_reason) line(container, 'p', `Причина отказа: ${data.low_confidence_reason}`);
+  line(container, 'h3', 'Баллы кандидатов по одежде');
+  const candidates = line(container, 'ul', '');
+  for (const c of (Array.isArray(data.candidates) ? data.candidates : []).slice(0, 20)) {
+    if (typeof c?.title === 'string' && Number.isFinite(c.score)) line(candidates, 'li', `${c.title}: ${c.score}/100`);
+  }
+  line(container, 'h3', 'Условия специальных категорий');
+  for (const check of (Array.isArray(data.special_checks) ? data.special_checks : []).slice(0, 20)) {
+    if (typeof check?.title !== 'string') continue;
+    line(container, 'h4', `${check.title}: ${check.eligible === true ? 'признаки подтверждены' : 'сочетание не подтверждено'}`);
+    const list = line(container, 'ul', '');
+    for (const requirement of (Array.isArray(check.requirements) ? check.requirements : []).slice(0, 12)) {
+      if (typeof requirement?.label !== 'string') continue;
+      line(list, 'li', `${requirement.met === true ? 'Подтверждено' : 'Не подтверждено'} — ${requirement.label}`);
+    }
+    if (check.note) line(container, 'p', check.note);
+  }
+  const features = data.features;
+  if (features && typeof features === 'object') {
+    line(container, 'h3', 'Признаки из ответа AI');
+    const visible = Object.fromEntries(Object.entries(features).filter(([, value]) => typeof value === 'boolean' || Number.isFinite(value)));
+    line(container, 'pre', JSON.stringify(visible, null, 2));
+  }
+  $('#local-diagnostics').hidden = false;
+}
 async function refreshAvailability() {
   const generation = ++availabilityGeneration;
   const status = $('#api-status');
   status.classList.remove('available', 'unavailable');
   if (!navigator.onLine) {
+    setDiagnosticsAvailability(null);
     status.textContent = 'Нет сети — новый AI-анализ недоступен.';
     status.classList.add('unavailable');
     return;
@@ -288,6 +345,7 @@ async function refreshAvailability() {
   status.textContent = 'Проверяем доступность AI-анализа…';
   const ready = await analysisReady();
   if (generation !== availabilityGeneration) return;
+  setDiagnosticsAvailability(ready);
   status.textContent = ready ? (ready.ai_available === false ? 'Сервер доступен. AI-анализ временно недоступен; часть результатов может быть доступна.' : 'Сервер AI-анализа подключён.') : 'AI-анализ пока не подключён. Интерфейс доступен для просмотра.';
   status.classList.add(ready ? 'available' : 'unavailable');
 }
@@ -296,6 +354,7 @@ async function analyze() {
   if (activeRequest || Date.now() < retryUntil) return;
   if (!navigator.onLine) { showError('Для нового AI-анализа нужен интернет.', true); return; }
   cancelRequest(); const generation = requestGeneration; const controller = new AbortController(); activeRequest = controller;
+  clearDiagnostics();
   let timedOut = false;
   const deadline = setTimeout(() => { timedOut = true; controller.abort(); }, 125000);
   showStep('analyzing-step'); $('#analysis-image').src = currentImage;
@@ -304,6 +363,7 @@ async function analyze() {
     const ready = await analysisReady(controller.signal);
     if (generation !== requestGeneration || modal.hidden) return;
     if (timedOut) throw new Error('analysis_timeout');
+    setDiagnosticsAvailability(ready);
     if (!ready) {
       showError('AI-анализ пока не подключён. Фото не отправлено — попробуй позже.', true);
       refreshAvailability();
@@ -312,6 +372,8 @@ async function analyze() {
     $('#analysis-status').textContent = 'AI анализирует видимые детали образа'; $('#progress-bar').style.width = '65%';
     const payload = new FormData(); payload.append('image', currentFile); payload.append('privacy_consent', 'true');
     const headers = { 'Idempotency-Key': analysisKey };
+    const wantDiagnostics = diagnosticsAvailable && $('#diagnostics-consent').checked;
+    if (wantDiagnostics) headers['X-Vibe-Diagnostics'] = '1';
     if (currentOriginalHash) headers['X-Original-Image-SHA256'] = currentOriginalHash;
     const response = await fetch(`${API_BASE}/v1/analyses`, { method: 'POST', body: payload, headers, signal: controller.signal });
     const data = await response.json().catch(() => ({}));
@@ -326,6 +388,7 @@ async function analyze() {
     if (!data || !data.result || !['completed', 'low_confidence'].includes(data.status)) throw new Error('invalid_response');
     $('#progress-bar').style.width = '100%';
     if (data.status === 'low_confidence') {
+      if (wantDiagnostics) renderDiagnostics(data.diagnostics);
       showError(lowConfidenceMessages[data.result.low_confidence_reason] || 'Не удалось уверенно определить образ. Попробуй другое фото при хорошем освещении.', false);
       return;
     }
@@ -342,7 +405,9 @@ async function analyze() {
       throw new Error('invalid_response');
     }
     showResult(result, data.analysis_id);
+    if (wantDiagnostics) renderDiagnostics(data.diagnostics);
   } catch (error) {
+    if (generation === requestGeneration && !modal.hidden) clearDiagnostics();
     if (timedOut && generation === requestGeneration && !modal.hidden) {
       showError('Анализ занял слишком много времени. Попробуй повторить запрос.', true);
       return;

@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -15,9 +17,10 @@ import (
 )
 
 type Expected struct {
-	Status   string `json:"status"`
-	Category string `json:"category"`
-	Reason   string `json:"reason,omitempty"`
+	Status     string   `json:"status"`
+	Category   string   `json:"category"`
+	Reason     string   `json:"reason,omitempty"`
+	Components []string `json:"components,omitempty"`
 }
 type Case struct {
 	ID       string          `json:"id"`
@@ -29,11 +32,14 @@ type Dataset struct {
 	Cases []Case `json:"cases"`
 }
 type Outcome struct {
-	ID       string   `json:"id"`
-	Expected Expected `json:"expected"`
-	Actual   Expected `json:"actual"`
-	Passed   bool     `json:"passed"`
-	Error    string   `json:"error,omitempty"`
+	ID                     string   `json:"id"`
+	Expected               Expected `json:"expected"`
+	Actual                 Expected `json:"actual"`
+	Passed                 bool     `json:"passed"`
+	Error                  string   `json:"error,omitempty"`
+	MissingComponents      []string `json:"missing_components,omitempty"`
+	UnexpectedComponents   []string `json:"unexpected_components,omitempty"`
+	ComponentOrderMismatch bool     `json:"component_order_mismatch,omitempty"`
 }
 type Cell struct {
 	Expected string `json:"expected"`
@@ -97,10 +103,7 @@ func Decode(r io.Reader) (Dataset, error) {
 			return d, fmt.Errorf("missing or duplicate case id")
 		}
 		seen[c.ID] = true
-		if c.Expected.Status != "completed" && c.Expected.Status != "low_confidence" {
-			return d, fmt.Errorf("case %q: invalid expected status", c.ID)
-		}
-		if (c.Expected.Status == "completed" && (c.Expected.Category == "" || c.Expected.Reason != "")) || (c.Expected.Status == "low_confidence" && (c.Expected.Category != "" || c.Expected.Reason == "")) {
+		if !validExpected(c.Expected) {
 			return d, fmt.Errorf("case %q: inconsistent expectation", c.ID)
 		}
 	}
@@ -118,13 +121,30 @@ func Run(d Dataset) Report {
 			var result scoring.Result
 			result, err = engine.Evaluate(f)
 			o.Actual = Expected{Status: result.Status, Category: result.PrimaryCategory.Code, Reason: result.LowConfidenceReason}
+			for _, component := range result.Components {
+				o.Actual.Components = append(o.Actual.Components, component.Code)
+			}
 		}
 		if err != nil {
 			o.Error = err.Error()
 			report.Invalid++
 			o.Actual.Status = "invalid_features"
 		}
-		o.Passed = err == nil && o.Actual == o.Expected
+		o.Passed = err == nil && o.Actual.Status == o.Expected.Status && o.Actual.Category == o.Expected.Category && o.Actual.Reason == o.Expected.Reason && slices.Equal(o.Actual.Components, o.Expected.Components)
+		if err == nil {
+			want, got := categories(o.Expected), categories(o.Actual)
+			for _, code := range want {
+				if !slices.Contains(got, code) {
+					o.MissingComponents = append(o.MissingComponents, code)
+				}
+			}
+			for _, code := range got {
+				if !slices.Contains(want, code) {
+					o.UnexpectedComponents = append(o.UnexpectedComponents, code)
+				}
+			}
+			o.ComponentOrderMismatch = len(want) > 1 && len(want) == len(got) && len(o.MissingComponents) == 0 && len(o.UnexpectedComponents) == 0 && !slices.Equal(want, got)
+		}
 		if o.Passed {
 			report.Passed++
 		} else {
@@ -147,10 +167,38 @@ func Run(d Dataset) Report {
 }
 func label(e Expected) string {
 	if e.Status == "completed" {
+		if len(e.Components) > 0 {
+			return strings.Join(e.Components, "+")
+		}
 		return e.Category
 	}
 	if e.Reason != "" {
 		return e.Status + ":" + e.Reason
 	}
 	return e.Status
+}
+
+var categoryToken = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+
+func validExpected(e Expected) bool {
+	if e.Status == "low_confidence" {
+		return e.Category == "" && categoryToken.MatchString(e.Reason) && len(e.Components) == 0
+	}
+	if e.Status != "completed" || !categoryToken.MatchString(e.Category) || e.Reason != "" {
+		return false
+	}
+	if len(e.Components) == 0 {
+		return true
+	}
+	return len(e.Components) == 2 && e.Components[0] == e.Category && e.Components[0] != e.Components[1] && categoryToken.MatchString(e.Components[1])
+}
+
+func categories(e Expected) []string {
+	if e.Status != "completed" {
+		return nil
+	}
+	if len(e.Components) > 0 {
+		return e.Components
+	}
+	return []string{e.Category}
 }
