@@ -229,7 +229,8 @@ const errorMessages = {
 const lowConfidenceMessages = {
   single_person_required: 'На фото должен быть один человек. Выбери кадр, где он хорошо виден.',
   image_quality_too_low: 'Качество кадра недостаточно для анализа. Сделай более чёткое фото при хорошем освещении.',
-  outfit_visibility_too_low: 'На фото не видно достаточно деталей образа. Попробуй другой ракурс, чтобы были видны одежда или причёска.',
+  outfit_visibility_too_low: 'Пока мало деталей для вердикта. Попробуй кадр, где виден хотя бы верх одежды — полный рост не нужен.',
+  insufficient_style_evidence: 'Фото загрузилось, но заметных деталей для категории пока мало. Попробуй другой ракурс — чтобы лучше были видны одежда или жест.',
   ai_confidence_too_low: 'AI не смог уверенно разобрать детали на этом фото. Попробуй другой ракурс и ровный свет.'
 };
 function showError(message, retryable = true, retryAfter = null) {
@@ -333,6 +334,10 @@ async function analyze() {
     if (typeof data.analysis_id !== 'string' || !data.analysis_id ||
         typeof result.primary_category?.title !== 'string' || !result.primary_category.title ||
         typeof result.level_title !== 'string' || typeof result.summary !== 'string' ||
+        (result.provisional !== undefined && typeof result.provisional !== 'boolean') ||
+        (result.assessment_note !== undefined && typeof result.assessment_note !== 'string') ||
+        (result.assessment_scope !== undefined && !['outfit', 'portrait'].includes(result.assessment_scope)) ||
+        (result.explanations !== undefined && (!Array.isArray(result.explanations) || result.explanations.length > 3 || !result.explanations.every(text => typeof text === 'string' && text.length <= 300))) ||
         !percentage(result.score) || !['coherence', 'originality', 'color_harmony'].every(key => percentage(result.metrics?.[key]))) {
       throw new Error('invalid_response');
     }
@@ -360,12 +365,24 @@ function showResult(result, analysisId) {
   $('#share').disabled = false;
   $('#share-note').textContent = '';
   $('#result-image').src = currentImage;
-  $('#result-score').hidden = false;
+  const portraitOnly = result.assessment_scope === 'portrait';
+  $('#result-score').hidden = portraitOnly;
   $('#result-score').textContent = result.score;
   $('#result-title').textContent = result.primary_category.title;
   $('#result-level').textContent = `Образ: ${result.level_title}`;
+  $('#result-level').hidden = portraitOnly;
   $('#result-description').textContent = result.summary;
-  $('#result-stats').hidden = false;
+  $('#result-status').textContent = result.provisional ? 'предварительный вердикт' : 'вердикт готов';
+  $('#result-assessment-note').textContent = result.provisional ? (result.assessment_note || 'По этому кадру оценка пока предварительная.') : '';
+  $('#result-assessment-note').hidden = !result.provisional;
+  const explanations = Array.isArray(result.explanations) ? result.explanations.filter(text => typeof text === 'string' && text.trim()).slice(0, 3) : [];
+  $('#result-reasons').replaceChildren(...explanations.map(text => {
+    const item = document.createElement('li');
+    item.textContent = text;
+    return item;
+  }));
+  $('#result-explanation').hidden = !explanations.length;
+  $('#result-stats').hidden = portraitOnly;
   $('#style-stat').textContent = `${result.metrics.coherence}%`;
   $('#energy-stat').textContent = `${result.metrics.originality}%`;
   $('#aura-stat').textContent = `${result.metrics.color_harmony}%`;
@@ -374,9 +391,10 @@ function showResult(result, analysisId) {
 }
 
 function resultText(record) {
-  return record.score == null
+  const text = record.score == null
     ? `Мой результат в ВАЙБЧЕК: ${record.category}. ${record.summary}`
     : `Мой результат в ВАЙБЧЕК: ${record.category}. Образ: ${record.levelTitle} — ${record.score}/100. А ты кто сегодня?`;
+  return record.provisional ? `Предварительный вердикт. ${text}` : text;
 }
 
 function historyCard(record) {
@@ -396,6 +414,11 @@ function historyCard(record) {
   const level = document.createElement('p');
   level.className = 'history-level';
   level.textContent = `Образ: ${record.levelTitle}`;
+  level.hidden = !record.levelTitle;
+  const note = document.createElement('p');
+  note.className = 'assessment-note';
+  note.textContent = record.provisional ? `Предварительный вердикт. ${record.assessmentNote || ''}` : '';
+  note.hidden = !record.provisional;
   const actions = document.createElement('div');
   actions.className = 'history-actions';
   for (const [label, action] of [['Скачать карточку', 'download'], ['Удалить', 'delete']]) {
@@ -404,7 +427,7 @@ function historyCard(record) {
     button.dataset.action = action; button.dataset.id = record.id;
     actions.append(button);
   }
-  card.append(top, title, level, actions);
+  card.append(top, title, level, note, actions);
   return card;
 }
 
@@ -435,8 +458,10 @@ $('#save-result').addEventListener('click', async () => {
     await window.VIBE_HISTORY.save(record.id, {
       score: record.score, level_title: record.levelTitle,
       primary_category: { title: record.category }, summary: record.summary,
-      metrics: { coherence: record.metrics.coherence, originality: record.metrics.originality, color_harmony: record.metrics.colorHarmony },
-      recommendations: record.recommendations
+      metrics: record.metrics ? { coherence: record.metrics.coherence, originality: record.metrics.originality, color_harmony: record.metrics.colorHarmony } : null,
+      recommendations: record.recommendations,
+      explanations: record.explanations, provisional: record.provisional,
+      assessment_note: record.assessmentNote, assessment_scope: record.assessmentScope
     });
     await renderHistory();
     if (currentRecord !== record || modal.hidden) return;

@@ -156,6 +156,17 @@ components:
         metrics: { type: object, additionalProperties: { $ref: '#/components/schemas/Score' } }
         summary: { type: string }
         recommendations: { type: array, items: { type: string } }
+        explanations:
+          type: array
+          maxItems: 3
+          items: { type: string }
+          description: Visible cues contributing most to the selected category. Omitted when no grounded explanation is available, including manual presets.
+        provisional: { type: boolean, description: Verdict is tentative because the image or visible evidence is limited. }
+        assessment_note: { type: string, description: Short explanation of assessment limits. }
+        assessment_scope:
+          type: string
+          enum: [portrait]
+          description: Portrait-only verdict. Outfit score and metrics are zero placeholders and must not be displayed as ratings; level and secondary category are empty. Omitted for outfit assessments.
         low_confidence_reason: { type: string }
     AnalysisResponse:
       type: object

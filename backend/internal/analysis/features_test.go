@@ -110,3 +110,41 @@ func TestLowConfidenceRules(t *testing.T) {
 		t.Fatalf("unexpected reason %q", reason)
 	}
 }
+
+func TestPortraitCueAllowsOnlyRecognizableSinglePerson(t *testing.T) {
+	for _, cue := range []string{"grimace", "finger", "smile", "skullcap_beard"} {
+		t.Run(cue, func(t *testing.T) {
+			f := VisualFeatures{PersonCount: 1, Confidence: 50}
+			switch cue {
+			case "grimace":
+				f.PlayfulGrimace = true
+			case "finger":
+				f.SeriousIndexPose = true
+			case "smile":
+				f.GentleSmile = true
+			case "skullcap_beard":
+				f.SkullcapVisible, f.BeardVisible = true, true
+			}
+			if reason := f.LowConfidenceReason(); reason != "" {
+				t.Fatalf("visible cue rejected: %s", reason)
+			}
+			f.Confidence = 19
+			if reason := f.LowConfidenceReason(); reason != "ai_confidence_too_low" {
+				t.Fatalf("uncertain cue accepted: %s", reason)
+			}
+			f.Confidence, f.PersonCount = 50, 2
+			if reason := f.LowConfidenceReason(); reason != "single_person_required" {
+				t.Fatalf("group accepted: %s", reason)
+			}
+		})
+	}
+	for _, f := range []VisualFeatures{
+		{PersonCount: 1, Confidence: 90},
+		{PersonCount: 1, Confidence: 90, SkullcapVisible: true},
+		{PersonCount: 1, Confidence: 90, BeardVisible: true},
+	} {
+		if reason := f.LowConfidenceReason(); reason != "outfit_visibility_too_low" {
+			t.Fatalf("no supported cue accepted: %s", reason)
+		}
+	}
+}

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"math"
 	"sort"
-	"strings"
 
 	"github.com/said-go/vibe-check/backend/internal/analysis"
 )
@@ -32,26 +31,30 @@ type Result struct {
 	Metrics             Metrics       `json:"metrics"`
 	Summary             string        `json:"summary"`
 	Recommendations     []string      `json:"recommendations"`
+	Explanations        []string      `json:"explanations,omitempty"`
+	Provisional         bool          `json:"provisional,omitempty"`
+	AssessmentNote      string        `json:"assessment_note,omitempty"`
+	AssessmentScope     string        `json:"assessment_scope,omitempty"`
 	LowConfidenceReason string        `json:"low_confidence_reason,omitempty"`
 }
 
 type featureName string
 type rule struct {
-	Code, Title, Summary string
-	Weights              map[featureName]float64
+	Code, Title string
+	Weights     map[featureName]float64
 }
 
 type Engine struct{ rules []rule }
 
 func NewEngine() *Engine {
 	return &Engine{rules: []rule{
-		{Code: "urban_classic", Title: "Собранный", Summary: "Всё аккуратно. Выглядишь так, будто у тебя встреча. Даже если встреча — с шаурмой.", Weights: map[featureName]float64{"formality": .30, "coherence": .25, "classic": .25, "harmony": .15, "accessories": .05}},
-		{Code: "healthy_casual", Title: "Здравый стиль", Summary: "Вещи подружились. Можно выходить без совета семейного чата.", Weights: map[featureName]float64{"coherence": .35, "harmony": .25, "sportiness": .15, "classic": .15, "originality": .10}},
-		{Code: "sport_chic", Title: "Спортик", Summary: "И за кофе, и на тренировку. Образ готов к обоим планам.", Weights: map[featureName]float64{"sport_chic": .35, "sportiness": .30, "coherence": .20, "originality": .15}},
-		{Code: "streetwear", Title: "Уличный стиль", Summary: "Свободная одежда и заметные детали. Город — твой подиум, маршрутка — первый ряд.", Weights: map[featureName]float64{"streetwear": .45, "originality": .25, "sportiness": .15, "accessories": .15}},
-		{Code: "alternative", Title: "Нефор", Summary: "Одежда с характером. У деталей явно свои планы.", Weights: map[featureName]float64{"alternative": .45, "originality": .20, "accessories": .10, "layering": .05, "unnatural_hair_color": .10, "piercing": .05, "hair_below_ears": .03, "hair_over_eyes": .02}},
-		{Code: "goth", Title: "Гот", Summary: "Тёмные вещи взяли слово. Похоже, спорить с ними бесполезно.", Weights: map[featureName]float64{"goth": .45, "darkness": .30, "coherence": .15, "layering": .10}},
-		{Code: "retro_90s", Title: "Бандит 90-х", Summary: "В кадре вайб старой видеокассеты: ретро-вещи и серьёзный выход за хлебом.", Weights: map[featureName]float64{"retro_90s": .70, "sportiness": .15, "accessories": .10, "originality": .05}},
+		{Code: "urban_classic", Title: "Собранный", Weights: map[featureName]float64{"formality": .30, "coherence": .25, "classic": .25, "harmony": .15, "accessories": .05}},
+		{Code: "healthy_casual", Title: "Здравый стиль", Weights: map[featureName]float64{"coherence": .35, "harmony": .25, "sportiness": .15, "classic": .15, "originality": .10}},
+		{Code: "sport_chic", Title: "Спортик", Weights: map[featureName]float64{"sport_chic": .35, "sportiness": .30, "coherence": .20, "originality": .15}},
+		{Code: "streetwear", Title: "Уличный стиль", Weights: map[featureName]float64{"streetwear": .45, "originality": .25, "sportiness": .15, "accessories": .15}},
+		{Code: "alternative", Title: "Нефор", Weights: map[featureName]float64{"alternative": .45, "originality": .20, "accessories": .10, "layering": .05, "unnatural_hair_color": .10, "piercing": .05, "hair_below_ears": .03, "hair_over_eyes": .02}},
+		{Code: "goth", Title: "Гот", Weights: map[featureName]float64{"goth": .45, "darkness": .30, "coherence": .15, "layering": .10}},
+		{Code: "retro_90s", Title: "Бандит 90-х", Weights: map[featureName]float64{"retro_90s": .70, "sportiness": .15, "accessories": .10, "originality": .05}},
 	}}
 }
 
@@ -76,7 +79,7 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 		}
 		return ranked[i].Score > ranked[j].Score
 	})
-	if features.GentleSmile && !strongOutfitStyle(features, ranked[0]) {
+	if features.GentleSmile && (features.OutfitVisibility == 0 || !strongOutfitStyle(features, ranked[0])) {
 		ranked = append([]CategoryScore{{Code: "pupsik", Title: "Пупсик", Score: 100}}, ranked...)
 	}
 	if features.SeriousIndexPose {
@@ -89,39 +92,39 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 		ranked = append([]CategoryScore{{Code: "clown", Title: "Клоун", Score: 100}}, ranked...)
 	}
 	overall := clamp(int(math.Round(float64(features.OutfitCoherence)*.45 + float64(features.ColorHarmony)*.30 + float64(features.Originality)*.25)))
-	primaryRule := e.ruleByCode(ranked[0].Code)
-	if ranked[0].Code == "mula" {
-		primaryRule.Summary = "На фото видны тюбетейка и борода. Про человека по одежде не гадаем."
-	}
-	if ranked[0].Code == "clown" {
-		primaryRule.Summary = "Пытались оценить стиль, но гримаса перехватила эфир. Сегодня главный аксессуар — чувство юмора."
-	}
-	if ranked[0].Code == "cool_pose" {
-		primaryRule.Summary = "Указательный палец поднят, взгляд серьёзный. Похоже, сейчас прозвучит важная мысль — осталось придумать какая."
-	}
-	if ranked[0].Code == "pupsik" {
-		primaryRule.Summary = "Лёгкая улыбка, спокойный кадр. Выглядит так, будто фото уже собрало лайки до публикации."
-	}
 	result := Result{
 		Status: "completed", PrimaryCategory: ranked[0], SecondaryCategory: ranked[1],
 		Level: level(overall).code, LevelTitle: level(overall).title, Score: overall, Confidence: features.Confidence,
 		Metrics: Metrics{Coherence: features.OutfitCoherence, Originality: features.Originality, ColorHarmony: features.ColorHarmony},
-		Summary: primaryRule.Summary, Recommendations: recommendations(features),
+		Summary: summaryForCategory(ranked[0].Code, features), Recommendations: recommendationsForFeatures(features),
+		Explanations: e.explanations(ranked[0].Code, features),
 	}
-	if ranked[0].Code == "alternative" {
-		result.Summary += alternativeDetails(features)
+	if features.OutfitVisibility < 60 || features.ImageQuality < 55 || features.Confidence < 70 {
+		result.Provisional = true
+		result.AssessmentNote = "Примерный вердикт: некоторые детали трудно разобрать."
+		if features.OutfitVisibility < 60 {
+			result.AssessmentNote = "Видна только часть образа — вердикт по тому, что попало в кадр."
+		}
 	}
-	if features.OutfitVisibility < 60 {
-		result.Summary += " Одежду видно не целиком — смотрим по тому, что попало в кадр."
+	if features.OutfitVisibility == 0 && features.HasPortraitCue() {
+		result.AssessmentScope = "portrait"
+		result.AssessmentNote = "Вердикт по позе или деталям портрета. Одежду не видно, поэтому баллы за образ не считаем."
+		result.Score, result.Metrics = 0, Metrics{}
+		result.Level, result.LevelTitle = "", ""
+		result.SecondaryCategory = CategoryScore{}
 	}
-	if features.ImageQuality < 55 {
-		result.Summary += " Кадр нечёткий, так что можем промахнуться."
+	if len(result.Explanations) == 0 {
+		result.Provisional = true
+		result.AssessmentNote = "Ярких признаков стиля мало — это только примерный вариант."
 	}
-	if features.Confidence < 70 {
-		result.Summary += " Это примерный вердикт."
+	reason := features.LowConfidenceReason()
+	if reason == "" && ranked[0].Score == 0 {
+		reason = "insufficient_style_evidence"
 	}
-	if reason := features.LowConfidenceReason(); reason != "" {
+	if reason != "" {
 		result.Status = "low_confidence"
+		result.Explanations = nil
+		result.Provisional, result.AssessmentNote, result.AssessmentScope = false, "", ""
 		result.LowConfidenceReason = reason
 		result.PrimaryCategory = CategoryScore{}
 		result.SecondaryCategory = CategoryScore{}
@@ -129,6 +132,9 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 		result.Level, result.LevelTitle = "", ""
 		result.Metrics = Metrics{}
 		switch reason {
+		case "insufficient_style_evidence":
+			result.Summary = "На этом кадре пока не нашли деталей, по которым можно выбрать стиль."
+			result.Recommendations = []string{"Попробуй кадр, где лучше видны одежда или поза"}
 		case "single_person_required":
 			result.Summary = "Нужен кадр с одним человеком, чтобы не смешать разные образы."
 			result.Recommendations = []string{"Выбери фото с одним человеком или обрежь кадр"}
@@ -165,26 +171,6 @@ func strongOutfitStyle(f analysis.VisualFeatures, category CategoryScore) bool {
 	default:
 		return false
 	}
-}
-
-func alternativeDetails(f analysis.VisualFeatures) string {
-	items := make([]string, 0, 4)
-	if f.UnnaturalHairColor {
-		items = append(items, "яркий цвет волос")
-	}
-	if f.PiercingVisible {
-		items = append(items, "пирсинг")
-	}
-	if f.HairBelowEars {
-		items = append(items, "длинные волосы")
-	}
-	if f.HairOverEyes {
-		items = append(items, "чёлка на глаза")
-	}
-	if len(items) == 0 {
-		return ""
-	}
-	return " Ещё в кадре: " + strings.Join(items, ", ") + ". Это добавило баллов стилю."
 }
 
 func (e *Engine) ruleByCode(code string) rule {
@@ -265,25 +251,6 @@ func level(score int) levelDefinition {
 		}
 	}
 	return selected
-}
-func recommendations(f analysis.VisualFeatures) []string {
-	items := make([]string, 0, 2)
-	if f.ColorHarmony < 65 {
-		items = append(items, "Сократи палитру до двух-трёх основных цветов")
-	}
-	if f.AccessoryIntensity < 35 {
-		items = append(items, "Добавь один выразительный аксессуар")
-	}
-	if f.OutfitCoherence < 70 {
-		items = append(items, "Повтори один цвет или материал в нескольких деталях")
-	}
-	if len(items) == 0 {
-		items = append(items, "Образ уже собран — сохрани баланс деталей")
-	}
-	if len(items) > 2 {
-		return items[:2]
-	}
-	return items
 }
 func clamp(value int) int {
 	if value < 0 {

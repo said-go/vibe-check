@@ -12,11 +12,11 @@ async function browser() {
   const docEvents = new Map(); let activeElement = null;
   const nodes = new Map(), timers = new Map(), intervals = new Map(), events = new Map();
   let time = 100000, timerID = 0, handler = async () => response({ status: 'ready', ai_available: true });
-  let calls = [], reloads = 0, cameraCalls = 0;
+  let calls = [], reloads = 0, cameraCalls = 0, createdNodes = 0;
   const node = selector => {
     if (!nodes.has(selector)) nodes.set(selector, { hidden: selector === '#camera-modal', disabled: false, isConnected: true, inert: false, offsetParent: {}, textContent: '', style: {}, checked: false,
-      classList: { add() {}, remove() {}, toggle() {} }, listeners: {}, clicks: 0,
-      addEventListener(type, fn) { this.listeners[type] = fn; }, setAttribute() {}, removeAttribute() {}, focus() { activeElement = this; }, append() {}, replaceChildren() {},
+      classList: { add() {}, remove() {}, toggle() {} }, listeners: {}, clicks: 0, children: [], dataset: {},
+      addEventListener(type, fn) { this.listeners[type] = fn; }, setAttribute() {}, removeAttribute() {}, focus() { activeElement = this; }, append(...children) { this.children.push(...children); }, replaceChildren(...children) { this.children = children; },
       click() { this.clicks++; }, querySelectorAll() { return []; }, getContext() { return { drawImage() {}, fillRect() {}, save() {}, restore() {}, translate() {}, scale() {} }; }
     });
     return nodes.get(selector);
@@ -26,7 +26,7 @@ async function browser() {
     VIBE_HISTORY: { list: async () => [], prepare: (id, result) => ({ id, ...result }) },
     VIBE_SHARE_CARD: { create: async () => new Blob(['card']) } };
   class ClockDate extends Date { static now() { return time; } }
-  const context = vm.createContext({ window, document: { querySelector: node, createElement: () => node('new-node'), body: { style: {} }, get activeElement() { return activeElement; }, addEventListener(type, fn) { docEvents.set(type, fn); } },
+  const context = vm.createContext({ window, document: { querySelector: node, createElement: () => node(`new-node-${++createdNodes}`), body: { style: {} }, get activeElement() { return activeElement; }, addEventListener(type, fn) { docEvents.set(type, fn); } },
     navigator: { onLine: true, mediaDevices: { getUserMedia: async () => { cameraCalls++; throw Error('camera disabled'); } }, serviceWorker: { controller: {}, addEventListener: (t, fn) => swEvents.set(t, fn) } },
     AbortController, Blob, FormData, URL, Date: ClockDate, Intl, console, crypto: require('node:crypto').webcrypto,
     fetch: (...args) => { calls.push(args); return handler(...args); },
@@ -79,6 +79,54 @@ test('valid server result renders the result step without automatically saving h
   assert.equal(b.node('#result-score').textContent,74);
   assert.equal(b.node('#save-result').disabled,false);
   assert.equal(b.run('activeRequest'),null);
+});
+
+test('partial assessment displays safe explanation text and clears it for legacy presets', async () => {
+  const b = await browser(); b.prepare();
+  const base = {score:70,primary_category:{title:'Спортик'},level_title:'Стиляга',summary:'Тест',metrics:{coherence:70,originality:70,color_harmony:70},recommendations:[]};
+  let result = {...base,provisional:true,assessment_scope:'outfit',assessment_note:'Видна только часть одежды.',explanations:['Спортивные детали.','<img src=x onerror=alert(1)>']};
+  b.setFetch(async url => url.includes('readyz') ? response({status:'ready'}) : response({status:'completed',analysis_id:'partial',result}));
+  await b.run('analyze()');
+  assert.equal(b.node('#result-status').textContent,'предварительный вердикт');
+  assert.equal(b.node('#result-assessment-note').textContent,'Видна только часть одежды.');
+  assert.equal(b.node('#result-explanation').hidden,false);
+  assert.equal(b.node('#result-reasons').children[1].textContent,'<img src=x onerror=alert(1)>');
+  result=base;
+  await b.run('analyze()');
+  assert.equal(b.node('#result-assessment-note').hidden,true);
+  assert.equal(b.node('#result-explanation').hidden,true);
+  assert.equal(b.node('#result-reasons').children.length,0);
+  assert.equal(b.node('#result-status').textContent,'вердикт готов');
+});
+
+test('portrait verdict hides unassessed outfit scores and restores them on next outfit', async () => {
+  const b=await browser(); b.prepare();
+  const base={score:0,primary_category:{title:'Типо крутой'},level_title:'',summary:'Тест',metrics:{coherence:0,originality:0,color_harmony:0},recommendations:[]};
+  let result={...base,provisional:true,assessment_scope:'portrait',assessment_note:'Одежду не видно.',explanations:['Палец поднят рядом с лицом.']};
+  b.setFetch(async url=>url.includes('readyz')?response({status:'ready'}):response({status:'completed',analysis_id:'portrait',result}));
+  await b.run('analyze()');
+  for(const id of ['#result-stats','#result-score','#result-level']) assert.equal(b.node(id).hidden,true);
+  result={...base,assessment_scope:'outfit',score:70,level_title:'Стиляга'};
+  await b.run('analyze()');
+  for(const id of ['#result-stats','#result-score','#result-level']) assert.equal(b.node(id).hidden,false);
+  assert.match(b.run("resultText({category:'Типо крутой',summary:'Тест',score:null,provisional:true})"),/^Предварительный вердикт/);
+});
+
+test('invalid explanation metadata is rejected before saving a record',async()=>{
+  const b=await browser();b.prepare();
+  b.setFetch(async url=>url.includes('readyz')?response({status:'ready'}):response({status:'completed',analysis_id:'bad',result:{score:70,primary_category:{title:'Тест'},level_title:'Тест',summary:'Тест',metrics:{coherence:70,originality:70,color_harmony:70},explanations:[{text:'wrong'}]}}));
+  await b.run('analyze()');
+  assert.equal(b.run('currentRecord'),null);
+  assert.match(b.node('#error-description').textContent,/неверный ответ/);
+});
+
+test('no style evidence shows a specific photo suggestion without a fabricated verdict',async()=>{
+  const b=await browser();b.prepare();
+  b.setFetch(async url=>url.includes('readyz')?response({status:'ready'}):response({status:'low_confidence',result:{low_confidence_reason:'insufficient_style_evidence'}}));
+  await b.run('analyze()');
+  assert.equal(b.run('currentRecord'),null);
+  assert.match(b.node('#error-description').textContent,/Фото загрузилось/);
+  assert.equal(b.node('#retry-analysis').hidden,true);
 });
 
 test('panoramic image that becomes too narrow after resize never reaches upload', async () => {

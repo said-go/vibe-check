@@ -31,6 +31,8 @@ func TestPhotoToYandexToResult(t *testing.T) {
 		wantStatus string
 	}{
 		{"completed", visualFeatures, "completed"},
+		{"portrait", strings.NewReplacer(`"outfit_visibility":90`, `"outfit_visibility":0`, `"person_count":1,`, `"person_count":1,"gentle_smile_visible":true,`).Replace(visualFeatures), "completed"},
+		{"no style evidence", `{"contract_version":"1.0.0","dominant_colors":[],"color_harmony":0,"darkness":0,"formality":0,"sportiness":0,"originality":0,"outfit_coherence":0,"accessory_intensity":0,"layering":0,"traditional_elements":0,"image_quality":90,"outfit_visibility":90,"confidence":90,"person_count":1,"subculture_signals":{"goth":0,"alternative":0,"streetwear":0,"classic":0,"sport_chic":0}}`, "low_confidence"},
 		{"no person", strings.Replace(visualFeatures, `"person_count":1`, `"person_count":0`, 1), "low_confidence"},
 		{"multiple people", strings.Replace(visualFeatures, `"person_count":1`, `"person_count":3`, 1), "low_confidence"},
 		{"uncertain model", strings.Replace(visualFeatures, `"confidence":86`, `"confidence":1`, 1), "low_confidence"},
@@ -99,9 +101,14 @@ func TestPhotoToYandexToResult(t *testing.T) {
 			var result struct {
 				Status string `json:"status"`
 				Result struct {
-					Score           int    `json:"score"`
-					Summary         string `json:"summary"`
-					PrimaryCategory struct {
+					Score               int      `json:"score"`
+					Summary             string   `json:"summary"`
+					Provisional         bool     `json:"provisional"`
+					AssessmentNote      string   `json:"assessment_note"`
+					AssessmentScope     string   `json:"assessment_scope"`
+					Explanations        []string `json:"explanations"`
+					LowConfidenceReason string   `json:"low_confidence_reason"`
+					PrimaryCategory     struct {
 						Code string `json:"code"`
 					} `json:"primary_category"`
 				} `json:"result"`
@@ -115,11 +122,17 @@ func TestPhotoToYandexToResult(t *testing.T) {
 			if result.Status != tc.wantStatus || result.Privacy.ServerImageStored || providerCalls.Load() != 1 {
 				t.Fatalf("unexpected result %+v, provider calls %d", result, providerCalls.Load())
 			}
-			if tc.wantStatus == "completed" && (result.Result.Score != 82 || result.Result.PrimaryCategory.Code == "") {
+			if tc.wantStatus == "completed" && tc.name != "portrait" && (result.Result.Score != 82 || result.Result.PrimaryCategory.Code == "" || len(result.Result.Explanations) == 0) {
 				t.Fatalf("completed score or category invalid: %+v", result.Result)
 			}
-			if tc.name == "partial outfit" && !strings.Contains(result.Result.Summary, "Одежду видно не целиком") {
+			if tc.name == "partial outfit" && (!result.Result.Provisional || !strings.Contains(result.Result.AssessmentNote, "Видна только часть образа")) {
 				t.Fatalf("partial view qualifier missing: %+v", result.Result)
+			}
+			if tc.name == "portrait" && (result.Result.AssessmentScope != "portrait" || !result.Result.Provisional || result.Result.Score != 0 || result.Result.PrimaryCategory.Code != "pupsik" || len(result.Result.Explanations) == 0) {
+				t.Fatalf("portrait contract invalid: %+v", result.Result)
+			}
+			if tc.name == "no style evidence" && (result.Result.LowConfidenceReason != "insufficient_style_evidence" || len(result.Result.Explanations) != 0) {
+				t.Fatalf("missing evidence gate: %+v", result.Result)
 			}
 			if tc.name == "mula" && result.Result.PrimaryCategory.Code != "mula" {
 				t.Fatalf("visible skullcap and beard should select mula: %+v", result.Result)

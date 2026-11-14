@@ -35,7 +35,7 @@
     ctx.fillStyle = INK; ctx.font = '800 72px Unbounded, Arial, sans-serif';
     ctx.fillText('ВАЙБЧЕК', 80, 108);
     ctx.font = '800 28px Manrope, Arial, sans-serif';
-    ctx.fillText('МОЙ ОБРАЗ СЕГОДНЯ', 80, 260);
+    ctx.fillText(record.provisional ? 'ПРЕДВАРИТЕЛЬНЫЙ ВЕРДИКТ' : 'МОЙ ОБРАЗ СЕГОДНЯ', 80, 260);
 
     ctx.fillStyle = BLUE; ctx.fillRect(80, 310, 920, 450);
     if (record.score != null) {
@@ -46,7 +46,7 @@
     ctx.textAlign = 'left'; ctx.fillStyle = '#ffffff'; ctx.font = '800 56px Unbounded, Arial, sans-serif';
     wrap(ctx, record.category.toUpperCase(), 130, 465, 535, 70, 2);
     ctx.font = '700 30px Manrope, Arial, sans-serif';
-    wrap(ctx, `Образ: ${record.levelTitle}`, 130, 620, 520, 44, 2);
+    wrap(ctx, record.assessmentScope === 'portrait' ? 'По позе и деталям в кадре' : `Образ: ${record.levelTitle}`, 130, 620, 520, 44, 2);
 
     ctx.fillStyle = INK; ctx.font = '800 29px Manrope, Arial, sans-serif';
     const metrics = [
@@ -55,7 +55,7 @@
       ['ЦВЕТ', record.metrics.colorHarmony]
     ];
     if (record.score == null) {
-      ctx.fillText('ВЕРДИКТ ПО ФОТО', 80, 890);
+      wrap(ctx, record.assessmentNote || 'Вердикт по фото — без оценки одежды', 80, 850, 900, 42, 3);
     } else metrics.forEach(([label, value], index) => {
       const x = 80 + index * 310;
       ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.strokeRect(x, 810, 290, 160);
@@ -67,6 +67,10 @@
 
     ctx.font = '700 31px Manrope, Arial, sans-serif';
     wrap(ctx, record.summary, 80, 1055, 900, 47, 3);
+    if (record.provisional && record.score != null) {
+      ctx.font = '600 23px Manrope, Arial, sans-serif';
+      ctx.fillText('По видимой части образа; детали могут изменить результат.', 80, 1210);
+    }
     ctx.fillStyle = ACID; ctx.fillRect(0, 1240, WIDTH, 110);
     ctx.fillStyle = INK; ctx.font = '800 26px Manrope, Arial, sans-serif';
     ctx.fillText('РАЗВЛЕКАТЕЛЬНЫЙ РЕЗУЛЬТАТ · БЕЗ ФОТО', 80, 1306);

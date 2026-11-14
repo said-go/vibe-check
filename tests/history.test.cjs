@@ -69,3 +69,34 @@ test('share card reports canvas or PNG encoding failure', async () => {
   await assert.rejects(card({ contextMissing: true }).api.create(record), /canvas_unavailable/);
   await assert.rejects(card({ blobMissing: true }).api.create(record), /image_unavailable/);
 });
+
+test('history preserves explanations and uncertainty without turning portrait results into zero ratings', async () => {
+  const h = history();
+  await h.api.save('portrait', { ...result, score: 0, assessment_scope: 'portrait', provisional: true,
+    assessment_note: 'Одежду не оцениваем: видна только улыбка.', explanations: ['В кадре лёгкая улыбка.'] });
+  const [record] = await h.api.list();
+  assert.equal(record.score, null); assert.equal(record.metrics.coherence, null);
+  assert.equal(record.levelTitle, ''); assert.equal(record.assessmentScope, 'portrait');
+  assert.equal(record.provisional, true); assert.equal(record.explanations[0], 'В кадре лёгкая улыбка.');
+  const c = card(); await c.api.create(record);
+  assert.ok(c.texts.includes('ПРЕДВАРИТЕЛЬНЫЙ ВЕРДИКТ'));
+  assert.ok(c.texts.join(' ').includes('Одежду не оцениваем'));
+  assert.ok(!c.texts.includes('0')); assert.ok(!c.texts.includes('0%'));
+});
+
+test('old history records default to full outfit and malformed evidence is bounded', async () => {
+  const h = history();
+  const old = h.api.prepare('old', result);
+  assert.equal(old.provisional, false); assert.equal(old.assessmentScope, 'outfit');
+  const record = h.api.prepare('new', { ...result, provisional: 'true',
+    explanations: [null, {}, 'a'.repeat(250), 'second', 'third', 'fourth'], assessment_note: 'n'.repeat(500) });
+  assert.equal(record.provisional, false); assert.equal(record.explanations.length, 3);
+  assert.equal(record.explanations[0].length, 180); assert.equal(record.assessmentNote.length, 320);
+});
+
+test('partial outfit share card retains uncertainty outside the joke', async () => {
+  const record = history().api.prepare('partial', { ...result, provisional: true, assessment_note: 'Видна только часть одежды.' });
+  const c = card(); await c.api.create(record);
+  assert.ok(c.texts.includes('ПРЕДВАРИТЕЛЬНЫЙ ВЕРДИКТ'));
+  assert.ok(c.texts.join(' ').includes('детали могут изменить результат'));
+});

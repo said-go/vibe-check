@@ -44,7 +44,8 @@
       .map(row => ({ ...compact(row.id, {
         score: row.score, level_title: row.levelTitle, primary_category: { title: row.category },
         summary: row.summary, metrics: { coherence: row.metrics.coherence, originality: row.metrics.originality, color_harmony: row.metrics.colorHarmony },
-        recommendations: row.recommendations
+        recommendations: row.recommendations, explanations: row.explanations,
+        provisional: row.provisional, assessment_note: row.assessmentNote, assessment_scope: row.assessmentScope
       }), createdAt: row.createdAt }))
       .sort((a, b) => b.createdAt - a.createdAt).slice(0, LIMIT);
   });
@@ -53,14 +54,19 @@
     if (!result || typeof result !== 'object') throw new Error('invalid_result');
     const text = (value, max = 180) => String(value || '').slice(0, max);
     const score = value => value == null ? null : Math.max(0, Math.min(100, Number.isFinite(value) ? Math.round(value) : 0));
+    const portrait = result.assessment_scope === 'portrait';
     return {
       id: text(id, 80), createdAt: Date.now(),
-      score: score(result.score), levelTitle: text(result.level_title, 80),
+      score: portrait ? null : score(result.score), levelTitle: portrait ? '' : text(result.level_title, 80),
       category: displayCategory(text(result.primary_category?.title, 80)),
       summary: text(result.summary, 240),
+      explanations: Array.isArray(result.explanations) ? result.explanations.filter(item => typeof item === 'string').slice(0, 3).map(item => text(item, 180)) : [],
+      provisional: result.provisional === true,
+      assessmentNote: text(result.assessment_note, 320),
+      assessmentScope: portrait ? 'portrait' : 'outfit',
       metrics: {
-        coherence: score(result.metrics?.coherence), originality: score(result.metrics?.originality),
-        colorHarmony: score(result.metrics?.color_harmony)
+        coherence: portrait ? null : score(result.metrics?.coherence), originality: portrait ? null : score(result.metrics?.originality),
+        colorHarmony: portrait ? null : score(result.metrics?.color_harmony)
       },
       recommendations: Array.isArray(result.recommendations) ? result.recommendations.slice(0, 3).map(item => text(item, 160)) : []
     };

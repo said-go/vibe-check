@@ -118,11 +118,17 @@ func (f VisualFeatures) LowConfidenceReason() string {
 	switch {
 	case f.PersonCount != 1:
 		return "single_person_required"
-	case f.OutfitVisibility == 0:
+	case f.OutfitVisibility == 0 && !f.HasPortraitCue():
 		return "outfit_visibility_too_low"
 	case f.Confidence < 20:
 		return "ai_confidence_too_low"
 	default:
 		return ""
 	}
+}
+
+// HasPortraitCue reports only explicit cues that can support a playful portrait
+// category without guessing unseen clothing.
+func (f VisualFeatures) HasPortraitCue() bool {
+	return f.PlayfulGrimace || f.SeriousIndexPose || f.GentleSmile || (f.SkullcapVisible && f.BeardVisible)
 }
