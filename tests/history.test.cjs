@@ -36,7 +36,7 @@ test('history enforces 50 records and supports deletion and clearing', async () 
   await h.api.clear(); assert.equal((await h.api.list()).length, 0);
 });
 test('malformed stored rows cannot break listing or return stored photo fields', async () => {
-  const h = history({ rows: [{ id: 'broken', createdAt: 1 }, { id: 'valid', createdAt: 2, category: 'Гот', metrics: {}, photo: 'SECRET_IMAGE' }] });
+  const h = history({ rows: [{ id: 'broken', createdAt: 1 }, { id: 'invalid-date', createdAt: 1e20, category: 'Стиляга', metrics: {} }, { id: 'valid', createdAt: 2, category: 'Гот', metrics: {}, photo: 'SECRET_IMAGE' }] });
   const rows = await h.api.list(); assert.equal(rows.length, 1); assert.equal(rows[0].id, 'valid');
   assert.ok(!JSON.stringify(rows).includes('SECRET_IMAGE'));
 });

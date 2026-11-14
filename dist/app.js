@@ -356,6 +356,9 @@ function showResult(result, analysisId) {
   }).catch(() => {});
   $('#save-result').disabled = false;
   $('#save-result').textContent = 'Сохранить в историю';
+  $('#download-card').disabled = false;
+  $('#share').disabled = false;
+  $('#share-note').textContent = '';
   $('#result-image').src = currentImage;
   $('#result-score').hidden = false;
   $('#result-score').textContent = result.score;
@@ -425,19 +428,22 @@ async function renderHistory() {
 
 $('#save-result').addEventListener('click', async () => {
   if (!currentRecord) return;
+  const record = currentRecord;
   const button = $('#save-result');
   button.disabled = true;
   try {
-    await window.VIBE_HISTORY.save(currentRecord.id, {
-      score: currentRecord.score, level_title: currentRecord.levelTitle,
-      primary_category: { title: currentRecord.category }, summary: currentRecord.summary,
-      metrics: { coherence: currentRecord.metrics.coherence, originality: currentRecord.metrics.originality, color_harmony: currentRecord.metrics.colorHarmony },
-      recommendations: currentRecord.recommendations
+    await window.VIBE_HISTORY.save(record.id, {
+      score: record.score, level_title: record.levelTitle,
+      primary_category: { title: record.category }, summary: record.summary,
+      metrics: { coherence: record.metrics.coherence, originality: record.metrics.originality, color_harmony: record.metrics.colorHarmony },
+      recommendations: record.recommendations
     });
     await renderHistory();
+    if (currentRecord !== record || modal.hidden) return;
     button.textContent = 'Сохранено';
     $('#share-note').textContent = 'Результат сохранён на этом устройстве без фото.';
   } catch {
+    if (currentRecord !== record || modal.hidden) return;
     button.disabled = false;
     $('#share-note').textContent = 'Не удалось сохранить результат на этом устройстве.';
   }
@@ -445,14 +451,18 @@ $('#save-result').addEventListener('click', async () => {
 
 $('#download-card').addEventListener('click', async () => {
   if (!currentRecord) return;
+  const record = currentRecord;
   const button = $('#download-card');
   button.disabled = true;
   try {
-    window.VIBE_SHARE_CARD.download(currentCardBlob || await window.VIBE_SHARE_CARD.create(currentRecord));
+    const blob = currentCardBlob || await window.VIBE_SHARE_CARD.create(record);
+    if (currentRecord !== record || modal.hidden) return;
+    window.VIBE_SHARE_CARD.download(blob);
     $('#share-note').textContent = 'Карточка PNG скачана без фотографии.';
   } catch {
+    if (currentRecord !== record || modal.hidden) return;
     $('#share-note').textContent = 'Не удалось собрать карточку. Попробуй ещё раз.';
-  } finally { button.disabled = false; }
+  } finally { if (currentRecord === record && !modal.hidden) button.disabled = false; }
 });
 
 $('#history-list').addEventListener('click', async event => {
@@ -500,10 +510,11 @@ $('#error-choose-again').addEventListener('click', chooseAgain);
 $('#again').addEventListener('click', chooseAgain);
 $('#share').addEventListener('click', async () => {
   if (!currentRecord) return;
+  const record = currentRecord;
   const button = $('#share');
   button.disabled = true;
   try {
-    const text = resultText(currentRecord);
+    const text = resultText(record);
     const file = currentCardBlob && new File([currentCardBlob], 'vibe-check.png', { type: 'image/png' });
     if (file && navigator.canShare?.({ files: [file] })) {
       await navigator.share({ title: 'Мой вайбчек', text, files: [file] });
@@ -511,11 +522,13 @@ $('#share').addEventListener('click', async () => {
       await navigator.share({ title: 'Мой вайбчек', text });
     } else {
       await navigator.clipboard.writeText(text);
+      if (currentRecord !== record || modal.hidden) return;
       $('#share-note').textContent = 'Текст результата скопирован. Карточку можно скачать отдельно.';
     }
   } catch (error) {
+    if (currentRecord !== record || modal.hidden) return;
     if (error.name !== 'AbortError') $('#share-note').textContent = 'Не получилось поделиться. Скачай карточку отдельно.';
-  } finally { button.disabled = false; }
+  } finally { if (currentRecord === record && !modal.hidden) button.disabled = false; }
 });
 modal.addEventListener('click', e => { if(e.target.matches('[data-close]')) closeModal(); });
 document.addEventListener('keydown', e => { if(e.key==='Escape' && !modal.hidden) closeModal(); });

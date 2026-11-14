@@ -217,6 +217,40 @@ test('modal isolates background and restores focus and overflow on Escape', asyn
   assert.equal(b.node('footer').inert,true);assert.equal(b.active(),b.node('#open-file'));
   assert.equal(b.run('document.body.style.overflow'),'scroll');
 });
+for (const action of ['save-result', 'download-card', 'share']) {
+  for (const failed of [false, true]) {
+    test(`old ${action} ${failed ? 'failure' : 'completion'} cannot alter a newer result`, async () => {
+      const b = await browser();
+      b.run(`
+        const sampleResult = { score: 70, level_title: 'Стиляга', primary_category: { title: 'Стиляга' }, summary: 'Тест', metrics: { coherence: 70, originality: 70, color_harmony: 70 }, recommendations: [] };
+        modal.hidden = false;
+        showResult(sampleResult, 'old');
+        let resolveAction, rejectAction;
+        const actionPending = new Promise((resolve, reject) => { resolveAction = resolve; rejectAction = reject; });
+        let downloads = 0;
+        window.VIBE_HISTORY.save = () => actionPending;
+        window.VIBE_SHARE_CARD.download = () => { downloads++; };
+        navigator.clipboard = { writeText: () => actionPending };
+      `);
+      // Avoid the pre-rendered PNG so download waits for encoding and share uses clipboard.
+      await flush();
+      b.run("currentCardBlob = null; window.VIBE_SHARE_CARD.create = () => actionPending;");
+      const pending = b.node('#' + action).listeners.click();
+      assert.equal(b.node('#' + action).disabled, true);
+      b.run("window.VIBE_SHARE_CARD.create = async () => new Blob(['new']); showResult(sampleResult, 'new');");
+      assert.equal(b.node('#' + action).disabled, false);
+      // A new operation owns this button now; old finally must not enable it.
+      b.node('#' + action).disabled = true;
+      b.run(failed ? "rejectAction(new Error('storage or encoding unavailable'))" : "resolveAction(new Blob(['old']))");
+      await pending;
+      assert.equal(b.node('#' + action).disabled, true);
+      assert.equal(b.node('#save-result').textContent, 'Сохранить в историю');
+      assert.equal(b.node('#share-note').textContent, '');
+      assert.equal(b.run('downloads'), 0);
+    });
+  }
+}
+
 test('removed modal opener falls back to launch button',async()=>{
   const b=await browser();b.node('#open-file').focus();b.run('openModal(false)');
   b.node('#open-file').isConnected=false;b.run('closeModal()');assert.equal(b.active(),b.node('#open-camera'));

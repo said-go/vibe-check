@@ -82,7 +82,7 @@ func CollectCheckpoint(ctx context.Context, m ImageManifest, base string, p visi
 	})
 	for i, c := range m.Cases {
 		if ctx.Err() != nil {
-			return Dataset{}, errors.New("collection cancelled or timed out")
+			return out, errors.New("collection cancelled or timed out")
 		}
 		raw, e := readImage(base, c.Path, i)
 		if e != nil {
@@ -93,18 +93,18 @@ func CollectCheckpoint(ctx context.Context, m ImageManifest, base string, p visi
 		}
 		clean, e := imageproc.New().Sanitize(bytes.NewReader(raw), "")
 		if e != nil {
-			return Dataset{}, fmt.Errorf("case %d: invalid JPEG/PNG or dimensions", i+1)
+			return out, fmt.Errorf("case %d: invalid JPEG/PNG or dimensions", i+1)
 		}
 		features, e := p.Analyze(ctx, clean.JPEG)
 		if e != nil {
-			return Dataset{}, fmt.Errorf("case %d: provider failed; earlier attempts may have been billed", i+1)
+			return out, fmt.Errorf("case %d: provider failed; earlier attempts may have been billed", i+1)
 		}
 		if features.Validate() != nil {
-			return Dataset{}, fmt.Errorf("case %d: invalid feature contract", i+1)
+			return out, fmt.Errorf("case %d: invalid feature contract", i+1)
 		}
 		encoded, e := json.Marshal(features)
 		if e != nil {
-			return Dataset{}, errors.New("cannot encode features")
+			return out, errors.New("cannot encode features")
 		}
 		out.Cases = append(out.Cases, Case{ID: fmt.Sprintf("case-%04d", i+1), Features: encoded, Expected: c.Expected})
 		if checkpoint != nil {

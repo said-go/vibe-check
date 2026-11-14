@@ -40,7 +40,7 @@
   const list = () => withDatabase(async db => {
     const rows = await transaction(db, 'readonly', store => store.getAll());
     return rows.filter(row => row && typeof row.id === 'string' && row.id &&
-      Number.isFinite(row.createdAt) && typeof row.category === 'string' && row.metrics && typeof row.metrics === 'object')
+      Number.isFinite(row.createdAt) && Number.isFinite(new Date(row.createdAt).getTime()) && typeof row.category === 'string' && row.metrics && typeof row.metrics === 'object')
       .map(row => ({ ...compact(row.id, {
         score: row.score, level_title: row.levelTitle, primary_category: { title: row.category },
         summary: row.summary, metrics: { coherence: row.metrics.coherence, originality: row.metrics.originality, color_harmony: row.metrics.colorHarmony },

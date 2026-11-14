@@ -151,3 +151,53 @@ func TestCollectStopsAfterCheckpointFailure(t *testing.T) {
 		t.Fatalf("checkpoint failure: calls=%d err=%v", p.calls, err)
 	}
 }
+
+func TestCollectPreservesCompletedCasesAfterFailure(t *testing.T) {
+	dir := t.TempDir()
+	var imageBytes bytes.Buffer
+	if err := png.Encode(&imageBytes, image.NewRGBA(image.Rect(0, 0, 128, 128))); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "valid.png"), imageBytes.Bytes(), 0600); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile("testdata/synthetic.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := Decode(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := analysis.DecodeFeatures(bytes.NewReader(d.Cases[0].Features))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []string{"provider", "cancelled", "invalid_features"} {
+		t.Run(mode, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			p := &collectProvider{features: f}
+			m := ImageManifest{Cases: []ImageCase{{Path: "valid.png", Expected: d.Cases[0].Expected}, {Path: "valid.png", Expected: d.Cases[0].Expected}}}
+			checkpoints := 0
+			partial, err := CollectCheckpoint(ctx, m, dir, p, 2, func(Case) error {
+				checkpoints++
+				switch mode {
+				case "provider":
+					p.fail = true
+				case "cancelled":
+					cancel()
+				case "invalid_features":
+					p.features.ContractVersion = "invalid"
+				}
+				return nil
+			})
+			if err == nil || len(partial.Cases) != 1 || checkpoints != 1 || partial.Cases[0].ID != "case-0001" || partial.Kind != "reviewed_features" {
+				t.Fatalf("partial=%+v checkpoints=%d err=%v", partial, checkpoints, err)
+			}
+			if mode == "cancelled" && p.calls != 1 {
+				t.Fatal("called provider after cancellation")
+			}
+		})
+	}
+}
