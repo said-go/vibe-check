@@ -59,7 +59,7 @@
     } else metrics.forEach(([label, value], index) => {
       const x = 80 + index * 310;
       ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.strokeRect(x, 810, 290, 160);
-      ctx.fillText(label, x + 20, 860);
+      ctx.fillText(label, x + 20, 860, 250);
       ctx.font = '800 65px Unbounded, Arial, sans-serif';
       ctx.fillText(`${value}%`, x + 20, 940);
       ctx.font = '800 29px Manrope, Arial, sans-serif';

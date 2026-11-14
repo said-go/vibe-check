@@ -73,11 +73,50 @@ test('diagnostics requires server opt-in and explicit checkbox, never enters sav
   b.run("showStep('consent-step')");assert.equal(b.node('#local-diagnostics').hidden,true);assert.equal(b.node('#diagnostics-content').children.length,0);
 });
 
-test('diagnostics displays nested numeric scoring signals without arbitrary provider text', async () => {
+test('diagnostics translates all normalized numeric and boolean fields including style signals', async () => {
   const b=await browser();
-  b.run(`renderDiagnostics({available:true,features:{confidence:90,beard_visible:false,dominant_colors:['PRIVATE'],subculture_signals:{goth:0,alternative:71,streetwear:22,classic:30,sport_chic:40,retro_90s:50,unexpected:'PRIVATE'}}})`);
-  const visible=JSON.parse(b.node('#diagnostics-content').children.at(-1).textContent);
-  assert.deepEqual(visible,{confidence:90,beard_visible:false,subculture_signals:{goth:0,alternative:71,streetwear:22,classic:30,sport_chic:40,retro_90s:50}});
+  const go=fs.readFileSync(path.join(__dirname,'../backend/internal/analysis/features.go'),'utf8');
+  const fields=type=>[...go.match(new RegExp(`type ${type} struct \\{([\\s\\S]*?)\\n\\}`))[1].matchAll(/\s(?:int|bool)\s+`json:"([^",]+)[^"]*"`/g)].map(m=>m[1]);
+  const mainKeys=fields('VisualFeatures'), signalKeys=fields('SubcultureSignals');
+  assert.deepEqual(JSON.parse(b.run('JSON.stringify([...Object.keys(diagnosticScores),...Object.keys(diagnosticCues),"person_count"].sort())')),mainKeys.sort());
+  assert.deepEqual(JSON.parse(b.run('JSON.stringify(Object.keys(diagnosticSignals).sort())')),signalKeys.sort());
+  b.run(`renderDiagnostics({available:true,features:{...Object.fromEntries(Object.keys(diagnosticScores).map(k=>[k,0])),...Object.fromEntries(Object.keys(diagnosticCues).map(k=>[k,false])),person_count:1,dominant_colors:['PRIVATE'],unexpected:99,subculture_signals:{...Object.fromEntries(Object.keys(diagnosticSignals).map(k=>[k,0])),unexpected:'PRIVATE'}}})`);
+  const texts=b.run(`(()=>{const walk=n=>[n.textContent,...n.children.map(walk)].join(' ');return walk($('#diagnostics-content'));})()`);
+  const labels=JSON.parse(b.run('JSON.stringify([...Object.values(diagnosticScores),...Object.values(diagnosticCues),...Object.values(diagnosticSignals)])'));
+  for(const label of labels) assert.ok(texts.includes(label+':'),label);
+  for(const key of [...mainKeys,...signalKeys]) assert.ok(!texts.includes(key),key);
+  assert.match(texts,/Готические детали: 0\/100/);
+  assert.match(texts,/Количество людей: 1/);
+  assert.match(texts,/Борода: Не подтверждено/);
+  assert.doesNotMatch(texts,/PRIVATE|unexpected/);
+});
+
+test('diagnostics distinguishes selection, failed requirements and limits of priority explanation', async () => {
+  const b=await browser();
+  b.run(`renderDiagnostics({available:true,low_confidence_reason:'ai_confidence_too_low',selected:[{code:'pupsik',title:'Пупсик'}],candidates:[{code:'pupsik',title:'Пупсик',score:70},{code:'clown',title:'Клоун',score:60}],special_checks:[{code:'pupsik',title:'Пупсик',eligible:true,requirements:[{feature:'gentle_smile_visible',label:'Улыбка подтверждена',met:true}]},{code:'clown',title:'Клоун',eligible:false,requirements:[{feature:'playful_grimace_visible',label:'Гримаса подтверждена',met:false}]}]})`);
+  const texts=b.run(`(()=>{const walk=n=>[n.textContent,...n.children.map(walk)].join(' ');return walk($('#diagnostics-content'));})()`);
+  assert.match(texts,/Пупсик: 70\/100 — выбрана/);
+  assert.match(texts,/Клоун: 60\/100 — не выбрана/);
+  assert.match(texts,/Пупсик: все перечисленные условия выполнены; выбрана/);
+  assert.match(texts,/Клоун: не все перечисленные условия выполнены; не указана среди выбранных/);
+  assert.match(texts,/Не подтверждено — Намеренная гримаса/);
+  assert.match(texts,/не доказывает его отсутствие/);
+  assert.match(texts,/а не характер человека/);
+  assert.match(texts,/Одних баллов недостаточно: учитываются сочетания признаков, приоритеты и качество снимка/);
+  assert.match(texts,/показаны не все этапы выбора/);
+  assert.match(texts,/AI не смог уверенно разобрать детали/);
+  assert.doesNotMatch(texts,/ai_confidence_too_low|playful_grimace_visible/);
+});
+
+test('alternative combination reports a bonus rather than a category selection', async () => {
+  const b=await browser();
+  for(const eligible of [true,false]) {
+    b.run(`renderDiagnostics({available:true,selected:[{code:'alternative',title:'Нефор'}],special_checks:[{code:'alternative_combination',title:'Дополнительные 40 баллов Нефору',eligible:${eligible},requirements:[{feature:'hair_below_ears_visible',label:'Волосы ниже ушей',met:${eligible}}],note:'Повтор технической оговорки'}]})`);
+    const texts=b.run(`(()=>{const walk=n=>[n.textContent,...n.children.map(walk)].join(' ');return walk($('#diagnostics-content'));})()`);
+    assert.ok(texts.includes(`Дополнительные 40 баллов Нефору: бонус ${eligible?'применён':'не применён'}`));
+    assert.ok(texts.includes(`${eligible?'Подтверждено':'Не подтверждено'} — Волосы ниже ушей`));
+    assert.doesNotMatch(texts,/не указана среди выбранных|Повтор технической оговорки/);
+  }
 });
 
 test('invalid completed response never displays diagnostics and can be retried', async () => {

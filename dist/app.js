@@ -288,6 +288,25 @@ function clearDiagnostics() {
   $('#local-diagnostics').open = false;
   $('#diagnostics-content').replaceChildren();
 }
+const diagnosticScores = {
+  color_harmony: 'Сочетаемость цветов', darkness: 'Доля тёмных тонов', formality: 'Формальность одежды',
+  sportiness: 'Спортивные детали', originality: 'Необычность образа', outfit_coherence: 'Согласованность одежды',
+  accessory_intensity: 'Выраженность аксессуаров', layering: 'Многослойность', traditional_elements: 'Традиционные детали одежды',
+  image_quality: 'Качество снимка', outfit_visibility: 'Видимость одежды', confidence: 'Уверенность распознавания'
+};
+const diagnosticCues = {
+  skullcap_visible: 'Тюбетейка', beard_visible: 'Борода', unnatural_hair_color_visible: 'Неестественный цвет окрашенных волос',
+  piercing_visible: 'Пирсинг', hair_below_ears_visible: 'Волосы ниже ушей', hair_over_eyes_visible: 'Волосы закрывают глаза',
+  playful_grimace_visible: 'Намеренная гримаса', serious_index_pose_visible: 'Указательный палец у лица и серьёзное выражение',
+  gentle_smile_visible: 'Небольшая расслабленная улыбка', relaxed_head_tilt_visible: 'Наклон головы и расслабленные брови',
+  beard_absent_visible: 'Видимое отсутствие бороды', muscular_visible: 'Выраженная мускулатура',
+  non_muscular_visible: 'Видимое телосложение без выраженной мускулатуры', short_hair_or_bald_visible: 'Короткая стрижка или лысина',
+  head_scar_visible: 'Видимый след, похожий на шрам на голове или лице'
+};
+const diagnosticSignals = {
+  goth: 'Готические детали', alternative: 'Альтернативный стиль', streetwear: 'Уличный стиль',
+  classic: 'Классический стиль', sport_chic: 'Спорт-шик', retro_90s: 'Мода 1990-х'
+};
 function renderDiagnostics(data) {
   clearDiagnostics();
   if (!data || typeof data !== 'object') return;
@@ -304,36 +323,53 @@ function renderDiagnostics(data) {
     $('#local-diagnostics').hidden = false; return;
   }
   const selected = Array.isArray(data.selected) ? data.selected : [];
+  const isSelected = category => selected.some(c => c && (typeof category.code === 'string' && typeof c.code === 'string'
+    ? c.code === category.code : c.title === category.title));
   line(container, 'h3', 'Выбранные категории');
   line(container, 'p', selected.map(c => c?.title).filter(t => typeof t === 'string').join(' + ') || 'Категория не выбрана');
+  line(container, 'p', 'Одних баллов недостаточно: учитываются сочетания признаков, приоритеты и качество снимка. Здесь показаны не все этапы выбора.');
   if (data.provisional) line(container, 'p', data.assessment_note || 'Предварительный результат');
-  if (data.low_confidence_reason) line(container, 'p', `Причина отказа: ${data.low_confidence_reason}`);
-  line(container, 'h3', 'Баллы кандидатов по одежде');
+  if (data.low_confidence_reason) line(container, 'p', `Причина недостаточной уверенности: ${lowConfidenceMessages[data.low_confidence_reason] || 'Сервер не передал понятное описание причины.'}`);
+  line(container, 'h3', 'Соответствие категориям');
   const candidates = line(container, 'ul', '');
   for (const c of (Array.isArray(data.candidates) ? data.candidates : []).slice(0, 20)) {
-    if (typeof c?.title === 'string' && Number.isFinite(c.score)) line(candidates, 'li', `${c.title}: ${c.score}/100`);
+    if (typeof c?.title === 'string' && Number.isFinite(c.score)) line(candidates, 'li', `${c.title}: ${c.score}/100 — ${isSelected(c) ? 'выбрана' : 'не выбрана'}`);
   }
+  line(container, 'p', 'Баллы показывают соответствие категории, а не вероятность и не оценку характера.');
   line(container, 'h3', 'Условия специальных категорий');
+  line(container, 'p', '«Подтверждено» — признак распознан на этом снимке. «Не подтверждено» — он не распознан или неразличим; это не доказывает его отсутствие. Проверки описывают только видимые детали, выражение лица и позу, а не характер человека.');
   for (const check of (Array.isArray(data.special_checks) ? data.special_checks : []).slice(0, 20)) {
     if (typeof check?.title !== 'string') continue;
-    line(container, 'h4', `${check.title}: ${check.eligible === true ? 'признаки подтверждены' : 'сочетание не подтверждено'}`);
+    const status = check.code === 'alternative_combination'
+      ? check.eligible === true ? 'бонус применён' : check.eligible === false ? 'бонус не применён' : 'нет результата проверки бонуса'
+      : `${check.eligible === true ? 'все перечисленные условия выполнены' : check.eligible === false ? 'не все перечисленные условия выполнены' : 'нет результата проверки'}; ${isSelected(check) ? 'выбрана' : 'не указана среди выбранных'}`;
+    line(container, 'h4', `${check.title}: ${status}`);
     const list = line(container, 'ul', '');
     for (const requirement of (Array.isArray(check.requirements) ? check.requirements : []).slice(0, 12)) {
       if (typeof requirement?.label !== 'string') continue;
-      line(list, 'li', `${requirement.met === true ? 'Подтверждено' : 'Не подтверждено'} — ${requirement.label}`);
+      const label = diagnosticCues[requirement.feature] || (requirement.feature === 'muscular_visible_false'
+        ? 'Распознавание выраженной мускулатуры не сработало (это не доказательство её отсутствия)' : requirement.label);
+      line(list, 'li', `${requirement.met === true ? 'Подтверждено' : requirement.met === false ? 'Не подтверждено' : 'Нет данных'} — ${label}`);
     }
-    if (check.note) line(container, 'p', check.note);
   }
   const features = data.features;
   if (features && typeof features === 'object') {
-    line(container, 'h3', 'Признаки из ответа AI');
-    const visible = Object.fromEntries(Object.entries(features).filter(([, value]) => typeof value === 'boolean' || Number.isFinite(value)));
-    if (features.subculture_signals && typeof features.subculture_signals === 'object') {
-      visible.subculture_signals = Object.fromEntries(
-        Object.entries(features.subculture_signals).filter(([, value]) => Number.isFinite(value))
-      );
+    line(container, 'h3', 'Распознанные признаки после проверки сервером');
+    line(container, 'p', 'Числа от 0 до 100 показывают выраженность признака по оценке модели. Уверенность и качество снимка — отдельные оценки, а не гарантия точности.');
+    const values = line(container, 'ul', '');
+    for (const [key, label] of Object.entries(diagnosticScores)) {
+      if (Number.isFinite(features[key])) line(values, 'li', `${label}: ${features[key]}/100`);
     }
-    line(container, 'pre', JSON.stringify(visible, null, 2));
+    if (Number.isFinite(features.person_count)) line(values, 'li', `Количество людей: ${features.person_count}`);
+    for (const [key, label] of Object.entries(diagnosticCues)) {
+      if (typeof features[key] === 'boolean') line(values, 'li', `${label}: ${features[key] ? 'Подтверждено' : 'Не подтверждено'}`);
+    }
+    line(container, 'h4', 'Детали стилей');
+    const signals = line(container, 'ul', '');
+    for (const [key, label] of Object.entries(diagnosticSignals)) {
+      if (Number.isFinite(features.subculture_signals?.[key])) line(signals, 'li', `${label}: ${features.subculture_signals[key]}/100`);
+    }
+    line(container, 'p', 'Названия цветов не выводятся: сервер исключает свободный текст модели из диагностики.');
   }
   $('#local-diagnostics').hidden = false;
 }
