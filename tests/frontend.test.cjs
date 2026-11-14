@@ -356,6 +356,74 @@ test('Retry-After blocks retries until its deadline',async()=>{
   const calls=b.calls().length;await b.run('analyze()');assert.equal(b.calls().length,calls);
   b.advance(3000);assert.equal(b.node('#retry-analysis').disabled,false);assert.equal(b.intervals.size,0);
 });
+
+test('server retryability wins over status fallback for flat and nested errors',async()=>{
+  for (const status of [429,503]) {
+    for (const nested of [false,true]) {
+      const b=await browser();b.prepare();
+      const error={code:'request_not_retryable',retryable:false};
+      b.setFetch(async url=>url.includes('readyz')?response({status:'ready'}):response(nested?{error}:error,status,{'Retry-After':'30'}));
+      await b.run('analyze()');
+      assert.equal(b.node('#retry-analysis').hidden,true);
+      assert.equal(b.intervals.size,0);
+    }
+  }
+});
+
+test('server photo decode failure asks for a new file without retrying the same photo',async()=>{
+  const b=await browser();b.prepare();
+  b.setFetch(async url=>url.includes('readyz')?response({status:'ready'}):response({code:'invalid_image',retryable:false},422));
+  await b.run('analyze()');
+  assert.match(b.node('#error-description').textContent,/JPEG.*PNG.*заново/);
+  assert.equal(b.node('#retry-analysis').hidden,true);
+  assert.equal(b.run('currentRecord'),null);
+});
+
+test('AI unavailable retains photo and idempotency key for an allowed retry',async()=>{
+  const b=await browser();b.prepare();
+  b.setFetch(async url=>url.includes('readyz')?response({status:'ready'}):response({error:{code:'ai_unavailable',retryable:true}},503,{'Retry-After':'2'}));
+  await b.run('analyze()');
+  assert.match(b.node('#error-description').textContent,/Фото осталось/);
+  b.advance(2000);await b.run('analyze()');
+  const uploads=b.calls().filter(([url])=>url.endsWith('/analyses'));
+  assert.equal(uploads.length,2);
+  assert.ok(uploads.every(([,options])=>options.headers['Idempotency-Key']==='same-photo-key-123'));
+});
+
+test('Retry-After honors long server delays and HTTP dates',async()=>{
+  for (const header of [' 172800 ',new Date(172800000).toUTCString()]) {
+    const b=await browser();b.prepare();
+    b.setFetch(async url=>url.includes('readyz')?response({status:'ready'}):response({code:'analysis_rate_limited',retryable:true},429,{'Retry-After':header}));
+    await b.run('analyze()');
+    assert.match(b.node('#error-description').textContent,/Лимит анализов/);
+    const count=b.calls().length;
+    b.advance(86400000);await b.run('analyze()');
+    assert.equal(b.node('#retry-analysis').disabled,true);
+    assert.equal(b.calls().length,count);
+    b.advance(86400000);assert.equal(b.node('#retry-analysis').disabled,false);
+  }
+});
+
+test('invalid or expired Retry-After does not lock retry',async()=>{
+  for (const header of ['-1','1.5','garbage',new Date(0).toUTCString()]) {
+    const b=await browser();b.prepare();
+    b.setFetch(async url=>url.includes('readyz')?response({status:'ready'}):response({code:'ai_unavailable',retryable:true},503,{'Retry-After':header}));
+    await b.run('analyze()');
+    assert.equal(b.node('#retry-analysis').disabled,false);
+    assert.equal(b.intervals.size,0);
+  }
+});
+
+test('overflowing Retry-After stays blocked with a finite deadline',async()=>{
+  const b=await browser();b.prepare();
+  b.setFetch(async url=>url.includes('readyz')?response({status:'ready'}):response({code:'analysis_rate_limited'},429,{'Retry-After':'9'.repeat(400)}));
+  await b.run('analyze()');
+  assert.equal(Number.isSafeInteger(b.run('retryUntil')),true);
+  b.advance(172800000);
+  const count=b.calls().length;await b.run('analyze()');
+  assert.equal(b.calls().length,count);
+  assert.equal(b.node('#retry-analysis').disabled,true);
+});
 test('selecting another uploaded photo opens file picker, not camera',async()=>{
   const b=await browser();b.prepare();b.run("lastPhotoSource='file'; chooseAgain()");
   assert.equal(b.node('#modal-file').clicks,1);assert.equal(b.cameraCalls(),0);
@@ -433,6 +501,35 @@ test('modal isolates background and restores focus and overflow on Escape', asyn
   assert.equal(b.node('footer').inert,true);assert.equal(b.active(),b.node('#open-file'));
   assert.equal(b.run('document.body.style.overflow'),'scroll');
 });
+for (const [name,message,expected] of [
+  ['QuotaExceededError','quota',/Хранилище браузера заполнено.*Карточку можно скачать/],
+  ['SecurityError','blocked',/не разрешает.*скачай карточку/],
+  ['Error','storage_unavailable',/не разрешает.*скачай карточку/],
+  ['UnknownError','unknown',/Не удалось сохранить.*скачай карточку/]
+]) {
+  test(`save failure ${name}/${message} keeps the result downloadable without marking it saved`,async()=>{
+    const b=await browser();
+    b.run(`modal.hidden=false;
+      showResult({score:70,primary_category:{title:'Стиляга'},summary:'Тест',metrics:{coherence:70,originality:70,color_harmony:70},recommendations:[]},'keep-result');
+      let historyCleared=false, downloads=0;
+      window.VIBE_HISTORY.clear=async()=>{historyCleared=true;};
+      window.VIBE_HISTORY.save=async()=>{throw Object.assign(new Error(${JSON.stringify(message)}),{name:${JSON.stringify(name)}});};
+      window.VIBE_SHARE_CARD.download=()=>{downloads++;};`);
+    await flush();
+    const record=b.run('currentRecord');
+    await b.node('#save-result').listeners.click();
+    assert.equal(b.run('currentRecord'),record);
+    assert.equal(b.node('#save-result').disabled,false);
+    assert.equal(b.node('#save-result').textContent,'Сохранить в историю');
+    assert.match(b.node('#share-note').textContent,expected);
+    if(name!=='QuotaExceededError') assert.doesNotMatch(b.node('#share-note').textContent,/заполнено/);
+    assert.equal(b.node('#download-card').disabled,false);
+    assert.equal(b.run('historyCleared'),false);
+    await b.node('#download-card').listeners.click();
+    assert.equal(b.run('downloads'),1);
+  });
+}
+
 for (const action of ['save-result', 'download-card', 'share']) {
   for (const failed of [false, true]) {
     test(`old ${action} ${failed ? 'failure' : 'completion'} cannot alter a newer result`, async () => {

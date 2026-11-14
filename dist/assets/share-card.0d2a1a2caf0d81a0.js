@@ -8,20 +8,32 @@
 
   function wrap(ctx, value, x, y, width, lineHeight, maxLines) {
     const words = String(value || '').split(/\s+/).filter(Boolean);
+    const lines = [];
     let line = '';
-    let lines = 0;
     for (const word of words) {
-      const next = line ? `${line} ${word}` : word;
-      if (ctx.measureText(next).width > width && line) {
-        ctx.fillText(line, x, y + lines * lineHeight);
-        lines++;
-        if (lines >= maxLines) return;
-        line = word;
-      } else {
+      const next = line ? line + ' ' + word : word;
+      if (ctx.measureText(next).width <= width) {
         line = next;
+        continue;
+      }
+      if (line) { lines.push(line); line = ''; }
+      // Break unspaced titles and URLs as well as ordinary words.
+      for (const character of word) {
+        if (line && ctx.measureText(line + character).width > width) {
+          lines.push(line);
+          line = '';
+        }
+        line += character;
       }
     }
-    if (line && lines < maxLines) ctx.fillText(line, x, y + lines * lineHeight);
+    if (line) lines.push(line);
+    const visible = lines.slice(0, maxLines);
+    if (lines.length > maxLines) {
+      const tail = Array.from(visible[maxLines - 1]);
+      while (tail.length && ctx.measureText(tail.join('') + '…').width > width) tail.pop();
+      visible[maxLines - 1] = tail.join('') + '…';
+    }
+    visible.forEach((text, index) => ctx.fillText(text, x, y + index * lineHeight, width));
   }
 
   async function create(record) {

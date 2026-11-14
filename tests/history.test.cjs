@@ -14,7 +14,7 @@ function history({ unavailable = false, fail = false, rows = [] } = {}) {
       delete: id => request(() => data.delete(id)), clear: () => request(() => data.clear())
     }; } };
     function request(work) { const req = {}; queueMicrotask(() => { if (!fail) { req.result = work(); req.onsuccess?.(); } }); return req; }
-    setImmediate(() => { if (fail) { tx.error = new Error('quota'); tx.onabort?.(); } else tx.oncomplete?.(); });
+    setImmediate(() => { if (fail) { tx.error = Object.assign(new Error('quota'), { name: 'QuotaExceededError' }); tx.onabort?.(); } else tx.oncomplete?.(); });
     return tx;
   } };
   const indexedDB = { open() { const req = {}; queueMicrotask(() => { req.result = db; req.onsuccess(); }); return req; } };
@@ -106,9 +106,9 @@ test('old history records default to full outfit and malformed evidence is bound
   assert.equal(old.provisional, false); assert.equal(old.assessmentScope, 'outfit');
   assert.equal(old.levelTitle, '');
   const record = h.api.prepare('new', { ...result, provisional: 'true',
-    explanations: [null, {}, 'a'.repeat(250), 'second', 'third', 'fourth'], assessment_note: 'n'.repeat(500) });
+    explanations: [null, {}, 'a'.repeat(350), 'second', 'third', 'fourth'], assessment_note: 'n'.repeat(500) });
   assert.equal(record.provisional, false); assert.equal(record.explanations.length, 3);
-  assert.equal(record.explanations[0].length, 180); assert.equal(record.assessmentNote.length, 320);
+  assert.equal(record.explanations[0].length, 300); assert.equal(record.assessmentNote.length, 320);
 });
 
 test('partial outfit share card retains uncertainty outside the joke', async () => {
@@ -138,4 +138,78 @@ test('cinematic mixed category is preserved in history and the shared card', asy
   const [record]=await h.api.list();assert.equal(record.category,'Герой боевика-качок');assert.equal(record.explanations.length,2);
   const c=card();await c.api.create(record);
   assert.ok(c.texts.join(' ').includes('ГЕРОЙ БОЕВИКА- КАЧОК'));
+});
+
+
+test('history preserves complete explanations allowed by the response contract', async () => {
+  const h = history();
+  const explanation = 'Подробное объяснение. '.repeat(14).slice(0, 300);
+  await h.api.save('long-report', { ...result, explanations: [explanation] });
+  const [record] = await h.api.list();
+  assert.equal(record.explanations[0], explanation);
+});
+
+test('legacy long IDs retain the database key for deletion and malformed text stays safe', async () => {
+  const id = 'legacy-'.repeat(20);
+  const h = history({ rows: [{ id, createdAt: 1, category: 'toString', metrics: {},
+    summary: { toString: null }, recommendations: [{ toString: null }, 'Подсказка'] }] });
+  const [record] = await h.api.list();
+  assert.equal(record.id, id);
+  assert.equal(record.category, 'toString');
+  assert.equal(record.summary, '');
+  assert.deepEqual(Array.from(record.recommendations), ['Подсказка']);
+  await card().api.create(record);
+  await h.api.remove(record.id);
+  assert.equal(h.data.size, 0);
+});
+
+test('bounded history text marks truncation and does not split surrogate pairs', () => {
+  const record = history().api.prepare('unicode', { ...result, summary: 'x'.repeat(238) + '😀tail' });
+  assert.equal(record.summary, 'x'.repeat(238) + '…');
+});
+
+test('quota failure preserves previously saved reports', async () => {
+  const old = history().api.prepare('old', result);
+  const h = history({ fail: true, rows: [old] });
+  await assert.rejects(h.api.save('new', result), { name: 'QuotaExceededError' });
+  assert.equal(h.data.size, 1);
+  assert.equal(h.data.get('old'), old);
+  assert.equal(h.closed(), 1);
+});
+
+test('share card wraps unspaced mixed titles and ellipsizes long report text within its regions', async () => {
+  const c = card();
+  const record = history().api.prepare('long', { ...result,
+    primary_category: { title: 'Киберпанк'.repeat(8) + '-спорт' }, summary: 'Объяснение'.repeat(24) });
+  await c.api.create(record);
+  const title = c.textCalls.filter(([, x, y]) => x === 130 && y >= 435 && y <= 555);
+  assert.ok(title.length > 1);
+  for (const [text, x, , maxWidth] of title) {
+    assert.ok(text.length * 12 <= 535, text);
+    assert.ok(x + maxWidth < 702, 'title must stay left of the score circle');
+  }
+  const summary = c.textCalls.filter(([, x, y]) => x === 80 && y >= 1055 && y <= 1149);
+  assert.equal(summary.length, 3);
+  assert.ok(summary[2][0].endsWith('…'));
+  for (const [text, , , maxWidth] of summary) assert.ok(text.length * 12 <= maxWidth);
+});
+
+test('share card marks truncation of many short title words', async () => {
+  const c = card();
+  await c.api.create({ ...history().api.prepare('words', result), category: 'Гот спорт '.repeat(30) });
+  const title = c.textCalls.filter(([, x, y]) => x === 130 && y >= 435 && y <= 555);
+  assert.equal(title.length, 3);
+  assert.ok(title[2][0].endsWith('…'));
+});
+
+
+test('saving long analysis IDs does not merge distinct records with the same prefix', async () => {
+  const h = history();
+  const prefix = 'id'.repeat(50);
+  await h.api.save(prefix + '-one', result);
+  await h.api.save(prefix + '-two', result);
+  const rows = await h.api.list();
+  assert.equal(rows.length, 2);
+  for (const record of rows) await h.api.remove(record.id);
+  assert.equal(h.data.size, 0);
 });

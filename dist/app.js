@@ -219,24 +219,26 @@ const errorMessages = {
   unsupported_image_type: 'Подойдёт только JPEG или PNG. Выбери другое фото.',
   image_dimensions_too_small: 'Фото слишком маленькое. Нужен кадр хотя бы 128×128 пикселей.',
   image_dimensions_too_large: 'Фото слишком большое. Сделай или выбери другой кадр.',
-  invalid_image: 'Файл не удалось прочитать как фотографию.',
+  invalid_image: 'Не удалось прочитать фото. Сохрани его в JPEG или PNG и выбери файл заново.',
   image_too_large: 'Не удалось отправить фото. Выбери файл поменьше или попробуй другой кадр.',
-  rate_limited: 'Слишком много запросов подряд. Подожди немного и попробуй снова.',
+  rate_limited: 'Лимит анализов временно исчерпан. Подожди и повтори с этим же фото.',
+  analysis_rate_limited: 'Лимит анализов временно исчерпан. Подожди и повтори с этим же фото.',
   idempotency_conflict: 'Это уже другое фото. Выбери его заново и повтори анализ.',
   invalid_idempotency_key: 'Не удалось подготовить запрос. Выбери фото заново.',
   ai_rejected_image: 'AI не смог обработать этот кадр. Попробуй другое фото.',
-  ai_unavailable: 'AI-сервис сейчас недоступен. Повтори попытку позже.',
+  ai_unavailable: 'AI-сервис сейчас недоступен. Фото осталось в этом окне — попробуй повторить анализ позже.',
   invalid_ai_response: 'Ответ AI не удалось проверить. Попробуй ещё раз.'
 };
 const lowConfidenceMessages = {
   single_person_required: 'На фото должен быть один человек. Выбери кадр, где он хорошо виден.',
   image_quality_too_low: 'Качество кадра недостаточно для анализа. Сделай более чёткое фото при хорошем освещении.',
   outfit_visibility_too_low: 'Пока мало деталей для вердикта. Попробуй кадр, где виден хотя бы верх одежды — полный рост не нужен.',
-  insufficient_style_evidence: 'Фото загрузилось, но заметных деталей для категории пока мало. Попробуй другой ракурс — чтобы лучше были видны одежда или жест.',
+  insufficient_style_evidence: 'Фото загрузилось, но заметных деталей для категории пока мало. Выбери другой кадр, где лучше видны одежда, аксессуары или жест. Полный рост не нужен.',
   ai_confidence_too_low: 'AI не смог уверенно разобрать детали на этом фото. Попробуй другой ракурс и ровный свет.'
 };
 function showError(message, retryable = true, retryAfter = null) {
   clearInterval(retryTimer);
+  retryTimer = null;
   retryUntil = 0;
   $('#error-title').textContent = 'НЕ ПОЛУЧИЛОСЬ';
   $('#error-description').textContent = message;
@@ -244,9 +246,11 @@ function showError(message, retryable = true, retryAfter = null) {
   $('#retry-analysis').disabled = false;
   $('#retry-analysis').textContent = 'Попробовать ещё раз';
   if (retryable && retryAfter) {
-    const seconds = /^\d+$/.test(retryAfter) ? Number(retryAfter) : Math.ceil((Date.parse(retryAfter) - Date.now()) / 1000);
+    const value = String(retryAfter).trim();
+    const maxDelay = Math.floor((Number.MAX_SAFE_INTEGER - Date.now()) / 1000);
+    const seconds = /^\d+$/.test(value) ? Math.min(Number(value), maxDelay) : /^[A-Za-z]{3},/.test(value) ? Math.ceil((Date.parse(value) - Date.now()) / 1000) : NaN;
     if (Number.isFinite(seconds) && seconds > 0) {
-      retryUntil = Date.now() + Math.min(seconds, 86400) * 1000;
+      retryUntil = Date.now() + seconds * 1000;
       const tick = () => {
         const left = Math.max(0, Math.ceil((retryUntil - Date.now()) / 1000));
         $('#retry-analysis').disabled = left > 0;
@@ -434,10 +438,11 @@ async function analyze() {
     const data = await response.json().catch(() => ({}));
     if (generation !== requestGeneration || modal.hidden) return;
     if (!response.ok) {
-      const error = data.error || data;
+      const error = data?.error || data || {};
       const unavailable = [404, 502, 503, 504].includes(response.status);
-      const message = response.status === 429 ? 'Слишком много запросов подряд. Подожди немного и попробуй снова.' : errorMessages[error.code] || (unavailable ? 'Сервер AI-анализа сейчас недоступен. Попробуй позже.' : 'Не удалось завершить анализ. Попробуй ещё раз.');
-      showError(message, response.status === 429 || unavailable || !!error.retryable, response.headers.get('Retry-After'));
+      const retryable = typeof error.retryable === 'boolean' ? error.retryable : response.status === 429 || unavailable;
+      const message = errorMessages[error.code] || (response.status === 429 ? errorMessages.rate_limited : unavailable ? errorMessages.ai_unavailable : retryable ? 'Не удалось завершить анализ. Попробуй ещё раз.' : 'Не удалось завершить анализ. Выбери фото заново.');
+      showError(message, retryable, response.headers.get('Retry-After'));
       return;
     }
     if (!data || !data.result || !['completed', 'low_confidence'].includes(data.status)) throw new Error('invalid_response');
@@ -583,10 +588,14 @@ $('#save-result').addEventListener('click', async () => {
     if (currentRecord !== record || modal.hidden) return;
     button.textContent = 'Сохранено';
     $('#share-note').textContent = 'Результат сохранён на этом устройстве без фото.';
-  } catch {
+  } catch (error) {
     if (currentRecord !== record || modal.hidden) return;
     button.disabled = false;
-    $('#share-note').textContent = 'Не удалось сохранить результат на этом устройстве.';
+    $('#share-note').textContent = error?.name === 'QuotaExceededError'
+      ? 'Хранилище браузера заполнено. Освободи место в настройках браузера и попробуй сохранить ещё раз. Карточку можно скачать.'
+      : error?.name === 'SecurityError' || error?.message === 'storage_unavailable'
+        ? 'Браузер не разрешает сохранять историю на этом устройстве. Проверь настройки хранения данных или скачай карточку.'
+        : 'Не удалось сохранить результат на этом устройстве. Попробуй ещё раз или скачай карточку.';
   }
 });
 

@@ -55,3 +55,7 @@
 
 .local-diagnostics{margin-top:24px;padding:16px;border:1px solid var(--ink);background:#fff9e8;text-align:left;font:14px Manrope,sans-serif;overflow-wrap:anywhere}.local-diagnostics summary{cursor:pointer;font-weight:800}.local-diagnostics h3{font-size:16px;margin:20px 0 8px}.local-diagnostics h4{font-size:14px;margin:14px 0 6px}.local-diagnostics pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}.local-diagnostics li{margin:6px 0}.local-diagnostics[hidden],#diagnostics-option[hidden]{display:none}
 @media(max-width:850px){.result-badge{right:auto;left:-12px}}
+
+.result-copy,.history-card{min-width:0}
+.result-copy>p,.history-card p{overflow-wrap:anywhere}
+.history-card-top{flex-wrap:wrap}
