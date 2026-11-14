@@ -102,6 +102,9 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 	if features.HasGentlePose() && (features.OutfitVisibility == 0 || !strongOutfitStyle(features, ranked[0])) {
 		ranked = append([]CategoryScore{{Code: "pupsik", Title: "Пупсик", Score: 100}}, ranked...)
 	}
+	if features.HasActionHeroCombination() {
+		ranked = append([]CategoryScore{{Code: "action_hero", Title: "Герой боевика", Score: 100}}, ranked...)
+	}
 	if features.SeriousIndexPose {
 		ranked = append([]CategoryScore{{Code: "cool_pose", Title: "Типо крутой", Score: 100}}, ranked...)
 	}

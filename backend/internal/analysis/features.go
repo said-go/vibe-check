@@ -20,35 +20,37 @@ type SubcultureSignals struct {
 }
 
 type VisualFeatures struct {
-	ContractVersion     string            `json:"contract_version"`
-	DominantColors      []string          `json:"dominant_colors"`
-	ColorHarmony        int               `json:"color_harmony"`
-	Darkness            int               `json:"darkness"`
-	Formality           int               `json:"formality"`
-	Sportiness          int               `json:"sportiness"`
-	Originality         int               `json:"originality"`
-	OutfitCoherence     int               `json:"outfit_coherence"`
-	AccessoryIntensity  int               `json:"accessory_intensity"`
-	Layering            int               `json:"layering"`
-	TraditionalElements int               `json:"traditional_elements"`
-	ImageQuality        int               `json:"image_quality"`
-	OutfitVisibility    int               `json:"outfit_visibility"`
-	Confidence          int               `json:"confidence"`
-	PersonCount         int               `json:"person_count"`
-	SkullcapVisible     bool              `json:"skullcap_visible"`
-	BeardVisible        bool              `json:"beard_visible"`
-	UnnaturalHairColor  bool              `json:"unnatural_hair_color_visible"`
-	PiercingVisible     bool              `json:"piercing_visible"`
-	HairBelowEars       bool              `json:"hair_below_ears_visible"`
-	HairOverEyes        bool              `json:"hair_over_eyes_visible"`
-	PlayfulGrimace      bool              `json:"playful_grimace_visible"`
-	SeriousIndexPose    bool              `json:"serious_index_pose_visible"`
-	GentleSmile         bool              `json:"gentle_smile_visible"`
-	RelaxedHeadTilt     bool              `json:"relaxed_head_tilt_visible"`
-	BeardAbsentVisible  bool              `json:"beard_absent_visible"`
-	MuscularVisible     bool              `json:"muscular_visible"`
-	NonMuscularVisible  bool              `json:"non_muscular_visible"`
-	Signals             SubcultureSignals `json:"subculture_signals"`
+	ContractVersion        string            `json:"contract_version"`
+	DominantColors         []string          `json:"dominant_colors"`
+	ColorHarmony           int               `json:"color_harmony"`
+	Darkness               int               `json:"darkness"`
+	Formality              int               `json:"formality"`
+	Sportiness             int               `json:"sportiness"`
+	Originality            int               `json:"originality"`
+	OutfitCoherence        int               `json:"outfit_coherence"`
+	AccessoryIntensity     int               `json:"accessory_intensity"`
+	Layering               int               `json:"layering"`
+	TraditionalElements    int               `json:"traditional_elements"`
+	ImageQuality           int               `json:"image_quality"`
+	OutfitVisibility       int               `json:"outfit_visibility"`
+	Confidence             int               `json:"confidence"`
+	PersonCount            int               `json:"person_count"`
+	SkullcapVisible        bool              `json:"skullcap_visible"`
+	BeardVisible           bool              `json:"beard_visible"`
+	UnnaturalHairColor     bool              `json:"unnatural_hair_color_visible"`
+	PiercingVisible        bool              `json:"piercing_visible"`
+	HairBelowEars          bool              `json:"hair_below_ears_visible"`
+	HairOverEyes           bool              `json:"hair_over_eyes_visible"`
+	PlayfulGrimace         bool              `json:"playful_grimace_visible"`
+	SeriousIndexPose       bool              `json:"serious_index_pose_visible"`
+	GentleSmile            bool              `json:"gentle_smile_visible"`
+	RelaxedHeadTilt        bool              `json:"relaxed_head_tilt_visible"`
+	BeardAbsentVisible     bool              `json:"beard_absent_visible"`
+	MuscularVisible        bool              `json:"muscular_visible"`
+	NonMuscularVisible     bool              `json:"non_muscular_visible"`
+	ShortHairOrBaldVisible bool              `json:"short_hair_or_bald_visible"`
+	HeadScarVisible        bool              `json:"head_scar_visible"`
+	Signals                SubcultureSignals `json:"subculture_signals"`
 }
 
 func DecodeFeatures(reader io.Reader) (VisualFeatures, error) {
@@ -140,7 +142,12 @@ func (f VisualFeatures) LowConfidenceReason() string {
 // HasPortraitCue reports only explicit cues that can support a playful portrait
 // category without guessing unseen clothing.
 func (f VisualFeatures) HasPortraitCue() bool {
-	return f.PlayfulGrimace || f.SeriousIndexPose || f.HasGentlePose() || (f.SkullcapVisible && f.BeardVisible) || f.MuscularVisible || f.HasAlternativeCombination()
+	return f.PlayfulGrimace || f.SeriousIndexPose || f.HasGentlePose() || (f.SkullcapVisible && f.BeardVisible) || f.MuscularVisible || f.HasAlternativeCombination() || f.HasActionHeroCombination()
+}
+
+// A playful cinematic look, not a claim about personality or history.
+func (f VisualFeatures) HasActionHeroCombination() bool {
+	return f.ShortHairOrBaldVisible && f.BeardVisible && f.HeadScarVisible
 }
 
 func (f VisualFeatures) HasAlternativeCombination() bool {

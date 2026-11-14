@@ -35,6 +35,8 @@
     "playful_grimace_visible": { "type": "boolean", "description": "Clearly deliberate playful facial grimace; false for ordinary smile, blink or unclear face." },
     "serious_index_pose_visible": { "type": "boolean", "description": "The main subject visibly raises an index finger near the face while making a neutral or serious expression; false if either part is unclear." },
     "beard_absent_visible": { "type": "boolean", "description": "Clearly visible chin and cheeks without a beard; hidden or uncertain face means false." },
+    "short_hair_or_bald_visible": { "type": "boolean", "description": "Clearly visible short haircut or bald/shaved head; a covered or unclear head means false. No inference about the cause." },
+    "head_scar_visible": { "type": "boolean", "description": "Clearly visible scar-like mark on the head or face, not a hair part, shadow, wrinkle or compression artifact. No inference about cause or medical history; uncertainty means false." },
     "muscular_visible": { "type": "boolean", "description": "Clearly visible developed musculature, not inferred from clothing or body weight." },
     "non_muscular_visible": { "type": "boolean", "description": "Body is clearly visible without pronounced musculature; unknown means false. Mutually exclusive with muscular_visible." },
     "gentle_smile_visible": { "type": "boolean", "description": "A clearly visible small relaxed smile on the main subject; only an expression in this image, not a personality trait." },

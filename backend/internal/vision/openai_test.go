@@ -37,7 +37,7 @@ func TestOpenAIAnalyzeUsesImageAndStrictSchema(t *testing.T) {
 		schema := format["schema"].(map[string]any)
 		properties := schema["properties"].(map[string]any)
 		required := schema["required"].([]any)
-		for _, field := range []string{"skullcap_visible", "beard_visible", "unnatural_hair_color_visible", "piercing_visible", "hair_below_ears_visible", "hair_over_eyes_visible", "playful_grimace_visible", "serious_index_pose_visible", "gentle_smile_visible"} {
+		for _, field := range []string{"skullcap_visible", "beard_visible", "unnatural_hair_color_visible", "piercing_visible", "hair_below_ears_visible", "hair_over_eyes_visible", "playful_grimace_visible", "serious_index_pose_visible", "gentle_smile_visible", "short_hair_or_bald_visible", "head_scar_visible"} {
 			if _, ok := properties[field]; !ok {
 				t.Errorf("strict schema missing %s property", field)
 			}

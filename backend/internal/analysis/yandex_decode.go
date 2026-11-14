@@ -24,6 +24,7 @@ func DecodeYandexFeatures(reader io.Reader) (VisualFeatures, error) {
 		return VisualFeatures{}, errors.New("decode Yandex features: expected object")
 	}
 	allowed := map[string]bool{
+		"short_hair_or_bald_visible": true, "head_scar_visible": true,
 		"beard_absent_visible": true, "muscular_visible": true, "non_muscular_visible": true,
 		"contract_version": true, "dominant_colors": true, "color_harmony": true,
 		"darkness": true, "formality": true, "sportiness": true, "originality": true,

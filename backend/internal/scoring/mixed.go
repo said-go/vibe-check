@@ -10,6 +10,8 @@ import (
 // score alone does not justify adding a second label.
 func strongCategory(f analysis.VisualFeatures, c CategoryScore) bool {
 	switch c.Code {
+	case "action_hero":
+		return f.HasActionHeroCombination()
 	case "muscular":
 		return f.MuscularVisible
 	case "clown":

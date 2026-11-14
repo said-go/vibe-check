@@ -118,3 +118,10 @@ test('mixed verdict remains one title through saving and sharing', async () => {
   assert.ok(c.texts.join(' ').includes('НЕФОР- КАЧОК'));
   assert.ok(c.texts.join(' ').includes('Оценка одежды: 75/100'));
 });
+
+test('cinematic mixed category is preserved in history and the shared card', async () => {
+  const h=history();await h.api.save('cinema',{...result,primary_category:{title:'Герой боевика-качок'},explanations:['Сочетание деталей для кинообраза.','Видна мускулатура.']});
+  const [record]=await h.api.list();assert.equal(record.category,'Герой боевика-качок');assert.equal(record.explanations.length,2);
+  const c=card();await c.api.create(record);
+  assert.ok(c.texts.join(' ').includes('ГЕРОЙ БОЕВИКА- КАЧОК'));
+});

@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"io"
 	"strings"
 	"testing"
 )
@@ -34,6 +35,23 @@ func TestNewVisibleBodyCuesSurviveYandexDecoder(t *testing.T) {
 		input = strings.Replace(validJSON, `"person_count":1,`, `"person_count":1,`+fields, 1)
 		if _, err := DecodeYandexFeatures(strings.NewReader(input)); err == nil {
 			t.Fatal("contradictory evidence accepted")
+		}
+	}
+}
+
+func TestCinematicCuesDecodeAndDefaultToUnknown(t *testing.T) {
+	for _, decode := range []func(io.Reader) (VisualFeatures, error){DecodeFeatures, DecodeYandexFeatures} {
+		old, err := decode(strings.NewReader(validJSON))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if old.ShortHairOrBaldVisible || old.HeadScarVisible {
+			t.Fatal("old response invented cues")
+		}
+		input := strings.Replace(validJSON, `"person_count":1,`, `"person_count":1,"short_hair_or_bald_visible":true,"head_scar_visible":true,"beard_visible":true,`, 1)
+		f, err := decode(strings.NewReader(input))
+		if err != nil || !f.HasActionHeroCombination() {
+			t.Fatalf("lost cinematic cues: %+v %v", f, err)
 		}
 	}
 }
