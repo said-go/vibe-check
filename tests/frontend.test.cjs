@@ -73,6 +73,13 @@ test('diagnostics requires server opt-in and explicit checkbox, never enters sav
   b.run("showStep('consent-step')");assert.equal(b.node('#local-diagnostics').hidden,true);assert.equal(b.node('#diagnostics-content').children.length,0);
 });
 
+test('diagnostics displays nested numeric scoring signals without arbitrary provider text', async () => {
+  const b=await browser();
+  b.run(`renderDiagnostics({available:true,features:{confidence:90,beard_visible:false,dominant_colors:['PRIVATE'],subculture_signals:{goth:0,alternative:71,streetwear:22,classic:30,sport_chic:40,retro_90s:50,unexpected:'PRIVATE'}}})`);
+  const visible=JSON.parse(b.node('#diagnostics-content').children.at(-1).textContent);
+  assert.deepEqual(visible,{confidence:90,beard_visible:false,subculture_signals:{goth:0,alternative:71,streetwear:22,classic:30,sport_chic:40,retro_90s:50}});
+});
+
 test('invalid completed response never displays diagnostics and can be retried', async () => {
   const b=await browser();b.prepare();b.node('#diagnostics-consent').checked=true;
   const diagnostics={available:true,selected:[{title:'Стиляга'}],features:{confidence:90}};
@@ -398,4 +405,15 @@ test('Tab wraps visible controls while excluding hidden step',async()=>{
   b.node('#camera-modal').querySelectorAll=()=>[first,hidden,last];let prevented=0;
   last.focus();b.node('#camera-modal').listeners.keydown({key:'Tab',shiftKey:false,preventDefault(){prevented++;}});assert.equal(b.active(),first);
   b.node('#camera-modal').listeners.keydown({key:'Tab',shiftKey:true,preventDefault(){prevented++;}});assert.equal(b.active(),last);assert.equal(prevented,2);
+});
+
+test('keyboard focus reaches diagnostic summary before wrapping inside modal',async()=>{
+  const b=await browser();b.run('openModal(false)');
+  const first=b.node('first-control'),button=b.node('last-button'),summary=b.node('diagnostic-summary');
+  b.node('#camera-modal').querySelectorAll=selector=>selector.split(',').some(part=>part.trim()==='summary')?[first,button,summary]:[first,button];
+  let prevented=0;
+  const tab=shiftKey=>b.node('#camera-modal').listeners.keydown({key:'Tab',shiftKey,preventDefault(){prevented++;}});
+  button.focus();tab(false);assert.equal(prevented,0);
+  summary.focus();tab(false);assert.equal(b.active(),first);assert.equal(prevented,1);
+  tab(true);assert.equal(b.active(),summary);assert.equal(prevented,2);
 });

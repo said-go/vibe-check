@@ -328,6 +328,11 @@ function renderDiagnostics(data) {
   if (features && typeof features === 'object') {
     line(container, 'h3', 'Признаки из ответа AI');
     const visible = Object.fromEntries(Object.entries(features).filter(([, value]) => typeof value === 'boolean' || Number.isFinite(value)));
+    if (features.subculture_signals && typeof features.subculture_signals === 'object') {
+      visible.subculture_signals = Object.fromEntries(
+        Object.entries(features.subculture_signals).filter(([, value]) => Number.isFinite(value))
+      );
+    }
     line(container, 'pre', JSON.stringify(visible, null, 2));
   }
   $('#local-diagnostics').hidden = false;
@@ -620,7 +625,7 @@ modal.addEventListener('click', e => { if(e.target.matches('[data-close]')) clos
 document.addEventListener('keydown', e => { if(e.key==='Escape' && !modal.hidden) closeModal(); });
 modal.addEventListener('keydown', event => {
   if (event.key !== 'Tab') return;
-  const focusable = [...modal.querySelectorAll('button:not([disabled]):not([hidden]), input:not([disabled]):not([hidden])')]
+  const focusable = [...modal.querySelectorAll('button:not([disabled]):not([hidden]), input:not([disabled]):not([hidden]), summary')]
     .filter(element => element.offsetParent !== null);
   if (!focusable.length) return;
   const first = focusable[0];
