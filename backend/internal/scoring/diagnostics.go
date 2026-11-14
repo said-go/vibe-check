@@ -15,9 +15,35 @@ type Diagnostic struct {
 	Candidates          []CategoryScore          `json:"candidates,omitempty"`
 	SpecialChecks       []DiagnosticCheck        `json:"special_checks,omitempty"`
 	Selected            []CategoryScore          `json:"selected,omitempty"`
+	DecisionReasons     []DecisionReason         `json:"decision_reasons,omitempty"`
 	Provisional         bool                     `json:"provisional"`
 	AssessmentNote      string                   `json:"assessment_note,omitempty"`
 	LowConfidenceReason string                   `json:"low_confidence_reason,omitempty"`
+}
+
+// DecisionReason records an executed decision branch, not an inferred explanation.
+// It is private diagnostic data and never part of Result or saved history.
+type DecisionReason struct {
+	Code     string         `json:"code"`
+	Category *CategoryScore `json:"category,omitempty"`
+	Other    *CategoryScore `json:"other,omitempty"`
+	Reason   string         `json:"reason"`
+}
+
+type decisionTrace struct{ reasons []DecisionReason }
+
+func (t *decisionTrace) add(code string, category, other CategoryScore, reason string) {
+	if t == nil {
+		return
+	}
+	r := DecisionReason{Code: code, Reason: reason}
+	if category.Code != "" {
+		r.Category = &category
+	}
+	if other.Code != "" {
+		r.Other = &other
+	}
+	t.reasons = append(t.reasons, r)
 }
 
 type DiagnosticRequirement struct {
@@ -35,10 +61,17 @@ type DiagnosticCheck struct {
 }
 
 func (e *Engine) Diagnose(f analysis.VisualFeatures, result Result) *Diagnostic {
+	// Replay the same deterministic path with an optional observer. No separate
+	// implementation of priorities or mixing is used for diagnostic explanations.
+	trace := &decisionTrace{}
+	if _, err := e.evaluate(f, trace); err != nil {
+		trace.reasons = nil
+	}
 	// The only unconstrained model strings are color names; omit them rather
 	// than echoing arbitrary provider text in diagnostics.
 	f.DominantColors = nil
 	d := &Diagnostic{Available: true, Source: "ai", Features: &f, Provisional: result.Provisional, AssessmentNote: result.AssessmentNote, LowConfidenceReason: result.LowConfidenceReason}
+	d.DecisionReasons = trace.reasons
 	for _, rule := range e.rules {
 		d.Candidates = append(d.Candidates, CategoryScore{Code: rule.Code, Title: rule.Title, Score: categoryScore(f, rule)})
 	}

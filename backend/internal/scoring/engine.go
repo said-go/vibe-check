@@ -59,6 +59,10 @@ func NewEngine() *Engine {
 }
 
 func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
+	return e.evaluate(features, nil)
+}
+
+func (e *Engine) evaluate(features analysis.VisualFeatures, trace *decisionTrace) (Result, error) {
 	if err := features.Validate(); err != nil {
 		return Result{}, err
 	}
@@ -75,9 +79,11 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 		}
 		return ranked[i].Score > ranked[j].Score
 	})
+	trace.add("score_order", ranked[0], ranked[1], "Первое место по баллам; при равных баллах раньше идёт код категории по алфавиту.")
 	if features.OutfitVisibility == 0 && features.HasAlternativeCombination() {
 		for i, c := range ranked {
 			if c.Code == "alternative" {
+				trace.add("portrait_alternative", c, ranked[0], "Одежду не видно; сочетание длинных волос, видимого отсутствия бороды и телосложения без выраженной мускулатуры ставит Нефора первым.")
 				ranked = append([]CategoryScore{c}, append(ranked[:i], ranked[i+1:]...)...)
 				break
 			}
@@ -86,24 +92,33 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 	if features.MuscularVisible {
 		muscle := CategoryScore{Code: "muscular", Title: "Качок", Score: 100}
 		if features.OutfitVisibility > 0 && strongOutfitStyle(features, ranked[0]) {
+			trace.add("muscular_after_outfit", ranked[0], muscle, "Выраженный стиль видимой одежды сохраняет первое место; Качок идёт следом.")
 			ranked = append(ranked[:1], append([]CategoryScore{muscle}, ranked[1:]...)...)
 		} else {
+			trace.add("muscular_priority", muscle, ranked[0], "Мускулатура подтверждена; у лидера нет выраженного стиля видимой одежды, поэтому Качок получает приоритет.")
 			ranked = append([]CategoryScore{muscle}, ranked...)
 		}
 	}
 	if features.HasGentlePose() && (features.OutfitVisibility == 0 || !strongOutfitStyle(features, ranked[0])) {
+		trace.add("pupsik_priority", CategoryScore{Code: "pupsik", Title: "Пупсик", Score: 100}, ranked[0], "Улыбка и расслабленный наклон головы подтверждены; текущий лидер не защищён правилом выраженного стиля видимой одежды.")
 		ranked = append([]CategoryScore{{Code: "pupsik", Title: "Пупсик", Score: 100}}, ranked...)
+	} else if features.HasGentlePose() {
+		trace.add("pupsik_suppressed", ranked[0], CategoryScore{Code: "pupsik", Title: "Пупсик", Score: 100}, "Пупсик не добавлен: выраженный стиль видимой одежды у текущего лидера важнее мягкой позы.")
 	}
 	if features.HasActionHeroCombination() {
+		trace.add("special_priority", CategoryScore{Code: "action_hero", Title: "Герой боевика", Score: 100}, ranked[0], "Короткая стрижка или лысина, борода и шрам подтверждены; правило ставит категорию выше текущего лидера независимо от баллов.")
 		ranked = append([]CategoryScore{{Code: "action_hero", Title: "Герой боевика", Score: 100}}, ranked...)
 	}
 	if features.SeriousIndexPose {
+		trace.add("special_priority", CategoryScore{Code: "cool_pose", Title: "Типо крутой", Score: 100}, ranked[0], "Серьёзная поза с указательным пальцем подтверждена; правило ставит категорию выше текущего лидера независимо от баллов.")
 		ranked = append([]CategoryScore{{Code: "cool_pose", Title: "Типо крутой", Score: 100}}, ranked...)
 	}
 	if features.SkullcapVisible && features.BeardVisible {
+		trace.add("special_priority", CategoryScore{Code: "mula", Title: "Мула", Score: 100}, ranked[0], "Тюбетейка и борода подтверждены; правило ставит категорию выше текущего лидера независимо от баллов.")
 		ranked = append([]CategoryScore{{Code: "mula", Title: "Мула", Score: 100}}, ranked...)
 	}
 	if features.PlayfulGrimace {
+		trace.add("special_priority", CategoryScore{Code: "clown", Title: "Клоун", Score: 100}, ranked[0], "Намеренная гримаса подтверждена; правило ставит категорию выше текущего лидера независимо от баллов.")
 		ranked = append([]CategoryScore{{Code: "clown", Title: "Клоун", Score: 100}}, ranked...)
 	}
 	overall := roundWeightedScore(features.OutfitCoherence*45 + features.ColorHarmony*30 + features.Originality*25)
@@ -114,7 +129,8 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 		Summary: summaryForCategory(ranked[0].Code, features), Recommendations: recommendationsForFeatures(features),
 		Explanations: e.explanations(ranked[0].Code, features),
 	}
-	e.mix(&result, ranked, features)
+	trace.add("ranked_leader", ranked[0], ranked[1], "После баллов и правил приоритета первая категория опережает ближайшего кандидата. Далее проверяется добавление второй части.")
+	e.mix(&result, ranked, features, trace)
 	if features.OutfitVisibility < 60 || features.ImageQuality < 55 || features.Confidence < 70 {
 		result.Provisional = true
 		result.AssessmentNote = "Примерный вердикт: некоторые детали трудно разобрать."
@@ -138,6 +154,7 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 		reason = "insufficient_style_evidence"
 	}
 	if reason != "" {
+		trace.add("quality_rejected", CategoryScore{}, CategoryScore{}, "Выбор отменён проверкой достаточности данных. Причина указана ниже; предварительные лидеры не являются вердиктом.")
 		result.Status = "low_confidence"
 		result.Explanations = nil
 		result.Components = nil
@@ -162,6 +179,9 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 			result.Summary = "Не разглядели одежду. Покажи её на другом фото."
 			result.Recommendations = []string{"Покажи хотя бы одну вещь одежды"}
 		}
+	}
+	if result.Status == "completed" {
+		trace.add("final_primary", result.PrimaryCategory, CategoryScore{}, "Итоговая основная категория после проверки смешивания и качества.")
 	}
 	return result, nil
 }

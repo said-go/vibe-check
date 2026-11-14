@@ -196,6 +196,15 @@ components:
         eligible: { type: boolean, description: Cue combination met; priorities and quality gates can still prevent selection. }
         requirements: { type: array, items: { $ref: '#/components/schemas/DiagnosticRequirement' } }
         note: { type: string }
+    DecisionReason:
+      type: object
+      required: [code, reason]
+      description: Executed scoring branch in chronological order, replayed by the same deterministic engine. Earlier leaders may be replaced or rejected; only selected contains the final categories.
+      properties:
+        code: { type: string }
+        category: { $ref: '#/components/schemas/CategoryScore' }
+        other: { $ref: '#/components/schemas/CategoryScore' }
+        reason: { type: string, description: Server-authored Russian explanation; never raw provider text. }
     Diagnostic:
       type: object
       required: [available, source, provisional]
@@ -208,6 +217,7 @@ components:
         candidates: { type: array, items: { $ref: '#/components/schemas/CategoryScore' } }
         special_checks: { type: array, items: { $ref: '#/components/schemas/DiagnosticCheck' } }
         selected: { type: array, items: { $ref: '#/components/schemas/CategoryScore' } }
+        decision_reasons: { type: array, items: { $ref: '#/components/schemas/DecisionReason' } }
         provisional: { type: boolean }
         assessment_note: { type: string }
         low_confidence_reason: { type: string }

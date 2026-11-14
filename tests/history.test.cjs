@@ -51,13 +51,27 @@ test('storage unavailable and quota errors reject; aborted transactions close th
   await assert.rejects(h.api.save('one', null), /invalid_result/);
 });
 function card({ contextMissing = false, blobMissing = false } = {}) {
-  const texts = []; const calls = []; const png = { type: 'image/png' };
-  const ctx = new Proxy({ measureText: s => ({ width: s.length * 12 }), fillText: text => texts.push(text) }, { get: (o, k) => k in o ? o[k] : () => {} });
+  const texts = []; const textCalls = []; const calls = []; const png = { type: 'image/png' };
+  const ctx = new Proxy({ measureText: s => ({ width: s.length * 12 }), fillText: (...args) => { texts.push(args[0]); textCalls.push(args); } }, { get: (o, k) => k in o ? o[k] : () => {} });
   const canvas = { getContext: () => contextMissing ? null : ctx, toBlob(cb, type) { calls.push(type); cb(blobMissing ? null : png); } };
   const window = {}; const document = { fonts: { ready: Promise.resolve() }, createElement(type) { assert.equal(type, 'canvas'); return canvas; } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../dist/share-card.js'), 'utf8'), { window, document });
-  return { api: window.VIBE_SHARE_CARD, texts, calls, canvas, png };
+  return { api: window.VIBE_SHARE_CARD, texts, textCalls, calls, canvas, png };
 }
+
+test('share card constrains originality label to its metric box interior', async () => {
+  const c = card();
+  await c.api.create(history().api.prepare('one', result));
+  const labels = c.textCalls.filter(([text]) => ['ЦЕЛЬНОСТЬ', 'ОРИГИНАЛЬНОСТЬ', 'ЦВЕТ'].includes(text));
+  assert.equal(labels.length, 3);
+  for (const [index, [text, x, y, maxWidth]] of labels.entries()) {
+    const boxLeft = 80 + index * 310;
+    assert.equal(x, boxLeft + 20, text);
+    assert.equal(y, 860, text);
+    assert.equal(maxWidth, 250, text);
+    assert.ok(x + maxWidth <= boxLeft + 290 - 20, text);
+  }
+});
 test('share card creates PNG with text metrics and never draws the supplied photo', async () => {
   const c = card(); const record = history().api.prepare('one', result); record.photo = 'SECRET_IMAGE';
   assert.equal(await c.api.create(record), c.png); assert.equal(c.calls[0], 'image/png');

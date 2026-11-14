@@ -327,7 +327,21 @@ function renderDiagnostics(data) {
     ? c.code === category.code : c.title === category.title));
   line(container, 'h3', 'Выбранные категории');
   line(container, 'p', selected.map(c => c?.title).filter(t => typeof t === 'string').join(' + ') || 'Категория не выбрана');
-  line(container, 'p', 'Одних баллов недостаточно: учитываются сочетания признаков, приоритеты и качество снимка. Здесь показаны не все этапы выбора.');
+  const decisions = (Array.isArray(data.decision_reasons) ? data.decision_reasons : [])
+    .filter(item => item && typeof item.reason === 'string').slice(0, 40);
+  if (decisions.length) {
+    line(container, 'h3', 'Почему получился этот вердикт');
+    line(container, 'p', 'Шаги фактического выбора: от лидера по баллам до итоговой категории. Приоритет может изменить порядок, а проверка качества — отменить выбор.');
+    const steps = line(container, 'ol', '');
+    const candidateText = c => typeof c?.title === 'string'
+      ? `${c.title}${Number.isFinite(c.score) ? ` (${c.score}/100)` : ''}` : '';
+    for (const decision of decisions) {
+      const names = [candidateText(decision.category), candidateText(decision.other)].filter(Boolean).join(' / ');
+      line(steps, 'li', `${names ? names + ': ' : ''}${decision.reason}`);
+    }
+  } else {
+    line(container, 'p', 'Одних баллов недостаточно: учитываются сочетания признаков, приоритеты и качество снимка. Здесь показаны не все этапы выбора.');
+  }
   if (data.provisional) line(container, 'p', data.assessment_note || 'Предварительный результат');
   if (data.low_confidence_reason) line(container, 'p', `Причина недостаточной уверенности: ${lowConfidenceMessages[data.low_confidence_reason] || 'Сервер не передал понятное описание причины.'}`);
   line(container, 'h3', 'Соответствие категориям');

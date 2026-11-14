@@ -108,6 +108,23 @@ test('diagnostics distinguishes selection, failed requirements and limits of pri
   assert.doesNotMatch(texts,/ai_confidence_too_low|playful_grimace_visible/);
 });
 
+test('diagnostics renders actual decision steps safely with names and scores', async () => {
+  const b=await browser();
+  b.run(`renderDiagnostics({available:true,selected:[{code:'goth',title:'Гот'},{code:'muscular',title:'Качок'}],decision_reasons:[null,42,{},
+    {code:'score_order',category:{title:'Стиляга',score:90},other:{title:'Гот',score:80},reason:'Первое место по баллам.'},
+    {code:'mix_clothing_first',category:{title:'Гот',score:80},other:{title:'Качок',score:100},reason:'Стиль одежды ставится первым.'},
+    {code:'mix_included',category:{title:'Гот',score:80},other:{title:'Качок',score:100},reason:'Вторая часть добавлена: обе подтверждены.'},
+    {code:'unknown',reason:'<img src=x onerror=alert(1)>'}]})`);
+  const texts=b.run(`(()=>{const walk=n=>[n.textContent,...n.children.map(walk)].join(' ');return walk($('#diagnostics-content'));})()`);
+  assert.match(texts,/Почему получился этот вердикт/);
+  assert.match(texts,/Стиляга \(90\/100\) \/ Гот \(80\/100\): Первое место по баллам/);
+  assert.match(texts,/Гот \(80\/100\) \/ Качок \(100\/100\): Стиль одежды ставится первым/);
+  assert.match(texts,/Вторая часть добавлена: обе подтверждены/);
+  assert.match(texts,/<img src=x onerror=alert\(1\)>/);
+  assert.doesNotMatch(texts,/score_order|mix_included|показаны не все этапы/);
+  assert.equal(b.run(`(()=>{const walk=n=>n.innerHTML!==undefined||n.children.some(walk);return walk($('#diagnostics-content'));})()`),false);
+});
+
 test('alternative combination reports a bonus rather than a category selection', async () => {
   const b=await browser();
   for(const eligible of [true,false]) {
@@ -350,14 +367,30 @@ test('worker activation in another tab does not reload an open photo',async()=>{
 });
 
 function serviceWorker({ shell, offline = new Response('offline'), network = new Response('new html'), assets = {}, previous, tabs = [], versions = [] } = {}) {
-  const handlers=new Map();let calls=0, writes=0;const deleted=[];
-  const cache={match:async key=>{const path=typeof key==='string'?key:new URL(key.url).pathname;return path==='/index.html'?shell:path==='/offline.html'?offline:assets[path];},put:async()=>writes++,addAll:async()=>{}};
+  const handlers=new Map();let calls=0, writes=0;const deleted=[], precached=[];
+  const cache={match:async key=>{const path=typeof key==='string'?key:new URL(key.url).pathname;return path==='/index.html'?shell:path==='/offline.html'?offline:assets[path];},put:async()=>writes++,addAll:async paths=>precached.push(...paths)};
   const context=vm.createContext({self:{location:{origin:'https://vibe.test'},addEventListener:(t,fn)=>handlers.set(t,fn),clients:{claim:async()=>{},matchAll:async()=>tabs},skipWaiting(){}},
     caches:{open:async()=>cache,match:async()=>previous,keys:async()=>versions,delete:async key=>{deleted.push(key);return true;}},URL,Response,
     fetch:async()=>{calls++;if(network instanceof Error)throw network;return network;}});
   vm.runInContext(swSource,context);
-  return { dispatch(path,mode='navigate',method='GET') {let result;handlers.get('fetch')({request:{url:'https://vibe.test'+path,mode,method},respondWith:p=>result=p});return result;},activate(){let result;handlers.get('activate')({waitUntil:p=>result=p});return result;},deleted,calls:()=>calls,writes:()=>writes};
+  return { dispatch(path,mode='navigate',method='GET') {let result;handlers.get('fetch')({request:{url:'https://vibe.test'+path,mode,method},respondWith:p=>result=p});return result;},activate(){let result;handlers.get('activate')({waitUntil:p=>result=p});return result;},install(){let result;handlers.get('install')({waitUntil:p=>result=p});return result;},precached,deleted,calls:()=>calls,writes:()=>writes};
 }
+
+test('worker installation precaches only public shell files and hashed assets',async()=>{
+  const sw=serviceWorker();await sw.install();
+  const publicFiles=new Set(['/index.html','/offline.html','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png','/icons/icon-maskable-512.png']);
+  assert.ok(sw.precached.includes('/index.html'));assert.ok(sw.precached.includes('/offline.html'));
+  for(const path of sw.precached) assert.ok(publicFiles.has(path)||/^\/assets\/[a-z-]+\.[a-f0-9]{16}\.(js|css)$/.test(path),`private or unexpected precache entry: ${path}`);
+});
+
+test('worker does not intercept photo or result downloads even when older caches contain a match',()=>{
+  const sw=serviceWorker({previous:new Response('private data')});
+  for(const path of ['/photos/person.jpg','/uploads/photo.png','/api/v1/analyses/example','/vibe-check.png']) {
+    assert.equal(sw.dispatch(path,'cors'),undefined,path);
+    assert.equal(sw.dispatch(path,'navigate'),undefined,path);
+  }
+  assert.equal(sw.calls(),0);assert.equal(sw.writes(),0);
+});
 test('installed release serves its own HTML even when newer HTML exists on network',async()=>{
   const sw=serviceWorker({shell:new Response('installed html')});assert.equal(await (await sw.dispatch('/')).text(),'installed html');assert.equal(sw.calls(),0);
 });
