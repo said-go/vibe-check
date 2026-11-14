@@ -48,6 +48,9 @@ function Test-DockerDaemon {
 Assert-Tool 'go'
 Assert-Tool 'node'
 
+# A child PowerShell keeps the regression tool stubs out of this process.
+Run-Checked (Get-Process -Id $PID).Path @('-NoProfile', '-File', (Join-Path $projectRoot 'scripts/test-deployment.ps1'))
+
 Push-Location -LiteralPath $backendRoot
 try {
     Run-Checked 'go' @('test', './...')

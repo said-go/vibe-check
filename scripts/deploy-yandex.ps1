@@ -9,6 +9,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'run-command.ps1')
 $projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 
 foreach ($item in @(
@@ -45,24 +46,13 @@ if (-not $Apply) {
 foreach ($tool in @('docker', 'yc')) {
     if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { throw "$tool is required for -Apply." }
 }
-if ((& git -C $projectRoot status --porcelain).Length -gt 0) { throw 'Working tree must be clean for -Apply.' }
+$gitStatus = & git -C $projectRoot status --porcelain
+if ($LASTEXITCODE -ne 0) { throw 'Cannot check working tree.' }
+if ($gitStatus.Length -gt 0) { throw 'Working tree must be clean for -Apply.' }
 
-& docker info --format '{{.Server.Version}}' 2>$null | Out-Null
-if ($LASTEXITCODE -ne 0) { throw 'Docker daemon is unavailable.' }
-
-& yc serverless container get --id $ContainerId --folder-id $FolderId --format json | Out-Null
-if ($LASTEXITCODE -ne 0) { throw 'Target container is unavailable.' }
-
-Push-Location -LiteralPath $projectRoot
-try {
-    & docker build --platform linux/amd64 -t $image .
-    if ($LASTEXITCODE -ne 0) { throw 'Docker build failed.' }
-    & docker push $image
-    if ($LASTEXITCODE -ne 0) { throw 'Docker push failed.' }
-} finally {
-    Pop-Location
-}
-
-& yc serverless container revision deploy --container-id $ContainerId --folder-id $FolderId --image $image --cores 1 --memory 1GB --execution-timeout 180s --concurrency 2 --zone-instances-limit 1 --service-account-id $ServiceAccountId --environment $environment --secret $secret
-if ($LASTEXITCODE -ne 0) { throw 'Revision deploy failed.' }
+Invoke-BoundedCommand docker @('info', '--format', '{{.Server.Version}}') 15 | Out-Null
+Invoke-BoundedCommand yc @('serverless', 'container', 'get', '--id', $ContainerId, '--folder-id', $FolderId, '--format', 'json') 60 | Out-Null
+Invoke-BoundedCommand docker @('build', '--platform', 'linux/amd64', '-t', $image, '.') 900 $projectRoot | Out-Null
+Invoke-BoundedCommand docker @('push', $image) 600 | Out-Null
+Invoke-BoundedCommand yc @('serverless', 'container', 'revision', 'deploy', '--container-id', $ContainerId, '--folder-id', $FolderId, '--image', $image, '--cores', '1', '--memory', '1GB', '--execution-timeout', '180s', '--concurrency', '2', '--zone-instances-limit', '1', '--service-account-id', $ServiceAccountId, '--environment', $environment, '--secret', $secret) 300 | Out-Null
 Write-Host 'Revision deployed. Public access was not changed; run smoke-yandex.ps1 against the HTTPS URL after configuring access.'

@@ -39,11 +39,18 @@
 
   const list = () => withDatabase(async db => {
     const rows = await transaction(db, 'readonly', store => store.getAll());
-    return rows.map(row => ({ ...row, category: displayCategory(row.category) }))
-      .sort((a, b) => b.createdAt - a.createdAt);
+    return rows.filter(row => row && typeof row.id === 'string' && row.id &&
+      Number.isFinite(row.createdAt) && typeof row.category === 'string' && row.metrics && typeof row.metrics === 'object')
+      .map(row => ({ ...compact(row.id, {
+        score: row.score, level_title: row.levelTitle, primary_category: { title: row.category },
+        summary: row.summary, metrics: { coherence: row.metrics.coherence, originality: row.metrics.originality, color_harmony: row.metrics.colorHarmony },
+        recommendations: row.recommendations
+      }), createdAt: row.createdAt }))
+      .sort((a, b) => b.createdAt - a.createdAt).slice(0, LIMIT);
   });
 
   function compact(id, result) {
+    if (!result || typeof result !== 'object') throw new Error('invalid_result');
     const text = (value, max = 180) => String(value || '').slice(0, max);
     const score = value => value == null ? null : Math.max(0, Math.min(100, Number.isFinite(value) ? Math.round(value) : 0));
     return {
@@ -62,13 +69,15 @@
   async function save(id, result) {
     const record = compact(id, result);
     if (!record.id) throw new Error('invalid_result');
-    await withDatabase(db => transaction(db, 'readwrite', store => store.put(record)));
-    const rows = await list();
-    if (rows.length > LIMIT) {
-      await withDatabase(db => transaction(db, 'readwrite', store => {
-        for (const row of rows.slice(LIMIT)) store.delete(row.id);
-      }));
-    }
+    await withDatabase(db => transaction(db, 'readwrite', store => {
+      store.put(record);
+      const request = store.getAll();
+      request.onsuccess = () => {
+        const rows = request.result;
+        rows.sort((a, b) => (b?.createdAt || 0) - (a?.createdAt || 0));
+        for (const row of rows.slice(LIMIT)) if (row?.id) store.delete(row.id);
+      };
+    }));
     return record;
   }
 

@@ -23,6 +23,9 @@ jobs:
       - name: Go vet
         working-directory: backend
         run: go vet ./...
+      - name: Offline scoring evaluation
+        working-directory: backend
+        run: go run ./cmd/evaluate -input internal/evaluation/testdata/synthetic.json
       - name: PWA JavaScript syntax
         run: |
           node --check dist/app.js
@@ -35,3 +38,6 @@ jobs:
           node --test tests/*.test.cjs
       - name: Production image build
         run: docker build --tag vibe-check:ci .
+      - name: Deployment script regression checks
+        shell: pwsh
+        run: ./scripts/test-deployment.ps1

@@ -20,6 +20,10 @@ pwsh -NoProfile -File scripts/deploy-yandex.ps1 `
 
 ## 1. Подготовить доступ
 
+Сценарии проверяются локально командой `powershell.exe -NoProfile -File scripts/test-deployment.ps1` (или `pwsh -NoProfile -File scripts/test-deployment.ps1` на Linux). Проверки подменяют Git, Docker, yc и HTTP; облачные вызовы и отправка фото не выполняются. Проверяются режим плана, запрет грязного рабочего дерева, неверные ID/URL, отсутствие AI, неверный Content-Type ресурса, ошибка и таймаут внешнего процесса.
+
+В режиме `-Apply` команды ограничены по времени: Docker info — 15 секунд, чтение контейнера — 60, сборка — 900, push — 600, публикация ревизии — 300. После таймаута процесс CLI завершается, но удалённая операция могла продолжиться: проверьте состояние Registry/ревизии перед повторным запуском. Вывод CLI с возможными диагностическими данными не печатается; скрипт сообщает имя команды и код завершения.
+
 Создайте сервисный аккаунт для контейнера. Дайте ему `container-registry.images.puller` на registry, `ai.languageModels.user` на каталог и `lockbox.payloadViewer` на конкретный секрет. Если секрет защищён пользовательским KMS ключом, потребуется и `kms.keys.encrypterDecrypter` на ключ. Для создания ревизии вызывающему пользователю нужна роль `iam.serviceAccounts.user` на сервисном аккаунте; для отправки образа в Registry — `container-registry.images.pusher` на registry или repository. Создайте API-ключ с областью `yc.ai.foundationModels.execute`, сохраните его в Yandex Lockbox под ключом `YANDEX_API_KEY`. Ключ не добавляйте в GitHub, Dockerfile или командную строку.
 
 ## 2. Собрать образ
