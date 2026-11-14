@@ -84,6 +84,7 @@ func TestSmileDoesNotEraseStrongClothingStyle(t *testing.T) {
 				f.Formality = 100
 			}
 			f.GentleSmile = true
+			f.RelaxedHeadTilt = true
 			r, err := NewEngine().Evaluate(f)
 			if err != nil || r.PrimaryCategory.Code != style {
 				t.Fatalf("smile erased %s: %+v %v", style, r, err)
@@ -271,6 +272,7 @@ func TestVisiblePoseAndSmileChoosePlayfulCategories(t *testing.T) {
 			features := baseFeatures()
 			features.SeriousIndexPose = tc.pose
 			features.GentleSmile = tc.smile
+			features.RelaxedHeadTilt = tc.smile
 			result, err := engine.Evaluate(features)
 			if err != nil {
 				t.Fatal(err)
@@ -282,6 +284,30 @@ func TestVisiblePoseAndSmileChoosePlayfulCategories(t *testing.T) {
 				t.Fatalf("pose or smile changed clothing score: %+v, baseline %+v", result, baseline)
 			}
 		})
+	}
+}
+
+func TestPupsikRequiresCombinedExpressionAndPose(t *testing.T) {
+	for _, smile := range []bool{false, true} {
+		for _, tilt := range []bool{false, true} {
+			f := baseFeatures()
+			f.GentleSmile, f.RelaxedHeadTilt = smile, tilt
+			r, err := NewEngine().Evaluate(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (r.PrimaryCategory.Code == "pupsik") != (smile && tilt) {
+				t.Fatalf("smile=%v tilt=%v produced %s", smile, tilt, r.PrimaryCategory.Code)
+			}
+			f.OutfitVisibility = 0
+			r, err = NewEngine().Evaluate(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (r.Status == "completed") != (smile && tilt) {
+				t.Fatalf("portrait smile=%v tilt=%v produced %s", smile, tilt, r.Status)
+			}
+		}
 	}
 }
 

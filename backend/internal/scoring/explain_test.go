@@ -25,6 +25,7 @@ func TestExplanationsUseStrongestActualContributions(t *testing.T) {
 func TestPortraitHasNoOutfitAssessment(t *testing.T) {
 	f := baseFeatures()
 	f.OutfitVisibility, f.GentleSmile = 0, true
+	f.RelaxedHeadTilt = true
 	f.Signals.Goth, f.Darkness = 100, 100 // stale outfit values cannot override portrait evidence
 	r, err := NewEngine().Evaluate(f)
 	if err != nil {
@@ -36,7 +37,7 @@ func TestPortraitHasNoOutfitAssessment(t *testing.T) {
 	if r.Score != 0 || r.Metrics != (Metrics{}) || r.Level != "" || r.SecondaryCategory.Code != "" {
 		t.Fatalf("invented outfit assessment: %+v", r)
 	}
-	if len(r.Explanations) != 1 || !strings.Contains(r.Explanations[0], "улыбка") {
+	if len(r.Explanations) != 2 || !strings.Contains(r.Explanations[0], "улыбка") {
 		t.Fatalf("wrong evidence: %v", r.Explanations)
 	}
 }

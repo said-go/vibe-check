@@ -57,7 +57,7 @@
     const portrait = result.assessment_scope === 'portrait';
     return {
       id: text(id, 80), createdAt: Date.now(),
-      score: portrait ? null : score(result.score), levelTitle: portrait ? '' : text(result.level_title, 80),
+      score: portrait ? null : score(result.score), levelTitle: '',
       category: displayCategory(text(result.primary_category?.title, 80)),
       summary: text(result.summary, 240),
       explanations: Array.isArray(result.explanations) ? result.explanations.filter(item => typeof item === 'string').slice(0, 3).map(item => text(item, 180)) : [],

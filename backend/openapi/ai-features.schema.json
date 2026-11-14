@@ -35,6 +35,7 @@
     "playful_grimace_visible": { "type": "boolean", "description": "Clearly deliberate playful facial grimace; false for ordinary smile, blink or unclear face." },
     "serious_index_pose_visible": { "type": "boolean", "description": "The main subject visibly raises an index finger near the face while making a neutral or serious expression; false if either part is unclear." },
     "gentle_smile_visible": { "type": "boolean", "description": "A clearly visible small relaxed smile on the main subject; only an expression in this image, not a personality trait." },
+    "relaxed_head_tilt_visible": { "type": "boolean", "description": "A clearly visible slight head tilt together with relaxed eyebrows on the main subject. Not camera rotation or a personality judgement." },
     "subculture_signals": {
       "type": "object",
       "additionalProperties": false,

@@ -19,8 +19,8 @@ func (e *Engine) explanations(code string, f analysis.VisualFeatures) []string {
 			return []string{"Поднят указательный палец.", "Серьёзное выражение лица дополняет позу."}
 		}
 	case "pupsik":
-		if f.GentleSmile {
-			return []string{"В кадре лёгкая улыбка — по ней выбран этот игровой вердикт."}
+		if f.HasGentlePose() {
+			return []string{"Небольшая улыбка и расслабленная мимика.", "Голова слегка наклонена, брови расслаблены — сработало сочетание, а не одна улыбка."}
 		}
 	case "mula":
 		if f.SkullcapVisible && f.BeardVisible {

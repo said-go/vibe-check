@@ -31,7 +31,7 @@ func TestPhotoToYandexToResult(t *testing.T) {
 		wantStatus string
 	}{
 		{"completed", visualFeatures, "completed"},
-		{"portrait", strings.NewReplacer(`"outfit_visibility":90`, `"outfit_visibility":0`, `"person_count":1,`, `"person_count":1,"gentle_smile_visible":true,`).Replace(visualFeatures), "completed"},
+		{"portrait", strings.NewReplacer(`"outfit_visibility":90`, `"outfit_visibility":0`, `"person_count":1,`, `"person_count":1,"gentle_smile_visible":true,"relaxed_head_tilt_visible":true,`).Replace(visualFeatures), "completed"},
 		{"no style evidence", `{"contract_version":"1.0.0","dominant_colors":[],"color_harmony":0,"darkness":0,"formality":0,"sportiness":0,"originality":0,"outfit_coherence":0,"accessory_intensity":0,"layering":0,"traditional_elements":0,"image_quality":90,"outfit_visibility":90,"confidence":90,"person_count":1,"subculture_signals":{"goth":0,"alternative":0,"streetwear":0,"classic":0,"sport_chic":0}}`, "low_confidence"},
 		{"no person", strings.Replace(visualFeatures, `"person_count":1`, `"person_count":0`, 1), "low_confidence"},
 		{"multiple people", strings.Replace(visualFeatures, `"person_count":1`, `"person_count":3`, 1), "low_confidence"},

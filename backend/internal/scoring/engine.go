@@ -79,7 +79,7 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 		}
 		return ranked[i].Score > ranked[j].Score
 	})
-	if features.GentleSmile && (features.OutfitVisibility == 0 || !strongOutfitStyle(features, ranked[0])) {
+	if features.HasGentlePose() && (features.OutfitVisibility == 0 || !strongOutfitStyle(features, ranked[0])) {
 		ranked = append([]CategoryScore{{Code: "pupsik", Title: "Пупсик", Score: 100}}, ranked...)
 	}
 	if features.SeriousIndexPose {

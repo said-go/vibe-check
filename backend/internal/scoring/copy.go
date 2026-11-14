@@ -70,10 +70,10 @@ var categorySummaries = map[string][]string{
 		"Палец уже поднят, серьёзный вид готов. Микрофон пока не выдали.",
 	},
 	"pupsik": {
-		"Лёгкая улыбка — и у кадра уже плюс один лайк.",
-		"Улыбка без спецэффектов. Кажется, фильтр сегодня отдыхает.",
-		"Улыбка попала в кадр раньше, чем успели сказать «сыр».",
-		"Лёгкая улыбка забрала внимание. Одежда не возражает.",
+		"Улыбка, наклон головы — у кадра уже плюс один лайк.",
+		"Улыбка и мягкая поза без спецэффектов. Фильтр сегодня отдыхает.",
+		"Улыбка и наклон головы готовы. Можно уже не говорить «сыр».",
+		"Улыбка вместе с позой забрала внимание. Одежда не возражает.",
 	},
 }
 
@@ -82,7 +82,7 @@ func summaryForCategory(code string, f analysis.VisualFeatures) string {
 	if (code == "mula" && !(f.SkullcapVisible && f.BeardVisible)) ||
 		(code == "clown" && !f.PlayfulGrimace) ||
 		(code == "cool_pose" && !f.SeriousIndexPose) ||
-		(code == "pupsik" && !f.GentleSmile) {
+		(code == "pupsik" && !f.HasGentlePose()) {
 		return "Смотрим по деталям, которые попали в кадр."
 	}
 	variants := categorySummaries[code]

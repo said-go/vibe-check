@@ -122,6 +122,7 @@ func TestPortraitCueAllowsOnlyRecognizableSinglePerson(t *testing.T) {
 				f.SeriousIndexPose = true
 			case "smile":
 				f.GentleSmile = true
+				f.RelaxedHeadTilt = true
 			case "skullcap_beard":
 				f.SkullcapVisible, f.BeardVisible = true, true
 			}
@@ -140,6 +141,8 @@ func TestPortraitCueAllowsOnlyRecognizableSinglePerson(t *testing.T) {
 	}
 	for _, f := range []VisualFeatures{
 		{PersonCount: 1, Confidence: 90},
+		{PersonCount: 1, Confidence: 90, GentleSmile: true},
+		{PersonCount: 1, Confidence: 90, RelaxedHeadTilt: true},
 		{PersonCount: 1, Confidence: 90, SkullcapVisible: true},
 		{PersonCount: 1, Confidence: 90, BeardVisible: true},
 	} {

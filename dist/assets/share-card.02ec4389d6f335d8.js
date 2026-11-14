@@ -46,7 +46,7 @@
     ctx.textAlign = 'left'; ctx.fillStyle = '#ffffff'; ctx.font = '800 56px Unbounded, Arial, sans-serif';
     wrap(ctx, record.category.toUpperCase(), 130, 465, 535, 70, 2);
     ctx.font = '700 30px Manrope, Arial, sans-serif';
-    wrap(ctx, record.assessmentScope === 'portrait' ? 'По позе и деталям в кадре' : `Образ: ${record.levelTitle}`, 130, 620, 520, 44, 2);
+    wrap(ctx, record.score == null ? 'По позе и деталям в кадре' : `Оценка одежды: ${record.score}/100`, 130, 620, 520, 44, 2);
 
     ctx.fillStyle = INK; ctx.font = '800 29px Manrope, Arial, sans-serif';
     const metrics = [

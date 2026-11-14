@@ -33,7 +33,8 @@ func DecodeYandexFeatures(reader io.Reader) (VisualFeatures, error) {
 		"piercing_visible": true, "hair_below_ears_visible": true,
 		"hair_over_eyes_visible": true, "playful_grimace_visible": true,
 		"serious_index_pose_visible": true, "gentle_smile_visible": true,
-		"subculture_signals": true,
+		"relaxed_head_tilt_visible": true,
+		"subculture_signals":        true,
 	}
 	for name := range fields {
 		if !allowed[name] {

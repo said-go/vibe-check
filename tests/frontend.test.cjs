@@ -55,6 +55,19 @@ test('missing consent never uploads', async () => {
   const b=await browser(); b.prepare(); b.node('#privacy-consent').checked=false;
   await b.run('analyze()'); assert.equal(b.calls().length,0);
 });
+
+test('legacy level titles never appear in history or shared text', async () => {
+  const b = await browser();
+  const text = b.run(`(() => {
+    const record = {id:'old',createdAt:100000,category:'Клоун',levelTitle:'Здравый пацан',score:72};
+    const card = historyCard(record);
+    const flatten = node => [node.textContent, ...node.children.map(flatten)].join(' ');
+    return flatten(card) + ' ' + resultText(record);
+  })()`);
+  assert.ok(text.includes('Клоун'));
+  assert.ok(text.includes('Оценка одежды: 72/100'));
+  assert.ok(!text.includes('Здравый пацан'));
+});
 test('malformed successful response shows an actionable error', async () => {
   const b=await browser();b.prepare();
   b.setFetch(async url=>url.includes('readyz')?response({status:'ready'}):response({status:'completed'}));
@@ -77,6 +90,7 @@ test('valid server result renders the result step without automatically saving h
   assert.equal(b.node('#result-step').hidden,false);
   assert.equal(b.node('#result-title').textContent,'Спортик');
   assert.equal(b.node('#result-score').textContent,74);
+  assert.equal(b.node('#result-level').textContent,'Оценка одежды: 74/100');
   assert.equal(b.node('#save-result').disabled,false);
   assert.equal(b.run('activeRequest'),null);
 });

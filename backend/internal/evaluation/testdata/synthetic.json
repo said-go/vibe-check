@@ -57,7 +57,7 @@
           "classic": 10,
           "sport_chic": 0
         },
-        "gentle_smile_visible": true
+        "gentle_smile_visible": true, "relaxed_head_tilt_visible": true
       },
       "expected": {
         "status": "completed",

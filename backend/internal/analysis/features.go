@@ -44,6 +44,7 @@ type VisualFeatures struct {
 	PlayfulGrimace      bool              `json:"playful_grimace_visible"`
 	SeriousIndexPose    bool              `json:"serious_index_pose_visible"`
 	GentleSmile         bool              `json:"gentle_smile_visible"`
+	RelaxedHeadTilt     bool              `json:"relaxed_head_tilt_visible"`
 	Signals             SubcultureSignals `json:"subculture_signals"`
 }
 
@@ -130,5 +131,9 @@ func (f VisualFeatures) LowConfidenceReason() string {
 // HasPortraitCue reports only explicit cues that can support a playful portrait
 // category without guessing unseen clothing.
 func (f VisualFeatures) HasPortraitCue() bool {
-	return f.PlayfulGrimace || f.SeriousIndexPose || f.GentleSmile || (f.SkullcapVisible && f.BeardVisible)
+	return f.PlayfulGrimace || f.SeriousIndexPose || f.HasGentlePose() || (f.SkullcapVisible && f.BeardVisible)
+}
+
+func (f VisualFeatures) HasGentlePose() bool {
+	return f.GentleSmile && f.RelaxedHeadTilt
 }

@@ -333,7 +333,7 @@ async function analyze() {
     const percentage = value => Number.isFinite(value) && value >= 0 && value <= 100;
     if (typeof data.analysis_id !== 'string' || !data.analysis_id ||
         typeof result.primary_category?.title !== 'string' || !result.primary_category.title ||
-        typeof result.level_title !== 'string' || typeof result.summary !== 'string' ||
+        typeof result.summary !== 'string' ||
         (result.provisional !== undefined && typeof result.provisional !== 'boolean') ||
         (result.assessment_note !== undefined && typeof result.assessment_note !== 'string') ||
         (result.assessment_scope !== undefined && !['outfit', 'portrait'].includes(result.assessment_scope)) ||
@@ -369,7 +369,7 @@ function showResult(result, analysisId) {
   $('#result-score').hidden = portraitOnly;
   $('#result-score').textContent = result.score;
   $('#result-title').textContent = result.primary_category.title;
-  $('#result-level').textContent = `Образ: ${result.level_title}`;
+  $('#result-level').textContent = `Оценка одежды: ${result.score}/100`;
   $('#result-level').hidden = portraitOnly;
   $('#result-description').textContent = result.summary;
   $('#result-status').textContent = result.provisional ? 'предварительный вердикт' : 'вердикт готов';
@@ -393,7 +393,7 @@ function showResult(result, analysisId) {
 function resultText(record) {
   const text = record.score == null
     ? `Мой результат в ВАЙБЧЕК: ${record.category}. ${record.summary}`
-    : `Мой результат в ВАЙБЧЕК: ${record.category}. Образ: ${record.levelTitle} — ${record.score}/100. А ты кто сегодня?`;
+    : `Мой результат в ВАЙБЧЕК: ${record.category}. Оценка одежды: ${record.score}/100. А ты кто сегодня?`;
   return record.provisional ? `Предварительный вердикт. ${text}` : text;
 }
 
@@ -406,15 +406,11 @@ function historyCard(record) {
   date.dateTime = new Date(record.createdAt).toISOString();
   date.textContent = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium' }).format(record.createdAt);
   const score = document.createElement('strong');
-  score.textContent = record.score == null ? '' : `${record.score}/100`;
+  score.textContent = record.score == null ? '' : `Оценка одежды: ${record.score}/100`;
   top.append(date);
   if (record.score != null) top.append(score);
   const title = document.createElement('h3');
   title.textContent = record.category;
-  const level = document.createElement('p');
-  level.className = 'history-level';
-  level.textContent = `Образ: ${record.levelTitle}`;
-  level.hidden = !record.levelTitle;
   const note = document.createElement('p');
   note.className = 'assessment-note';
   note.textContent = record.provisional ? `Предварительный вердикт. ${record.assessmentNote || ''}` : '';
@@ -427,7 +423,7 @@ function historyCard(record) {
     button.dataset.action = action; button.dataset.id = record.id;
     actions.append(button);
   }
-  card.append(top, title, level, note, actions);
+  card.append(top, title, note, actions);
   return card;
 }
 

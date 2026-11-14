@@ -63,6 +63,8 @@ test('share card creates PNG with text metrics and never draws the supplied phot
   assert.equal(await c.api.create(record), c.png); assert.equal(c.calls[0], 'image/png');
   assert.equal(c.canvas.width, 1080); assert.equal(c.canvas.height, 1350);
   assert.ok(c.texts.includes('75')); assert.ok(!c.texts.join().includes('SECRET_IMAGE'));
+  assert.ok(c.texts.join(' ').includes('Оценка одежды: 75/100'));
+  assert.ok(!c.texts.join(' ').includes('Стиляга'));
 });
 test('share card reports canvas or PNG encoding failure', async () => {
   const record = history().api.prepare('one', result);
@@ -88,6 +90,7 @@ test('old history records default to full outfit and malformed evidence is bound
   const h = history();
   const old = h.api.prepare('old', result);
   assert.equal(old.provisional, false); assert.equal(old.assessmentScope, 'outfit');
+  assert.equal(old.levelTitle, '');
   const record = h.api.prepare('new', { ...result, provisional: 'true',
     explanations: [null, {}, 'a'.repeat(250), 'second', 'third', 'fourth'], assessment_note: 'n'.repeat(500) });
   assert.equal(record.provisional, false); assert.equal(record.explanations.length, 3);
