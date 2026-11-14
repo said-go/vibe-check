@@ -70,8 +70,14 @@ func (c *idempotencyCache) contains(key string) bool {
 	return ok && (!entry.complete || time.Now().Before(entry.expiresAt))
 }
 
-func (c *idempotencyCache) begin(key string, sanitizedJPEG []byte) (*idempotencyEntry, idempotencyState) {
-	digest := sha256.Sum256(sanitizedJPEG)
+func (c *idempotencyCache) begin(key string, sanitizedJPEG []byte, originalHash ...string) (*idempotencyEntry, idempotencyState) {
+	hash := sha256.New()
+	hash.Write(sanitizedJPEG)
+	if len(originalHash) > 0 {
+		hash.Write([]byte("\x00" + originalHash[0]))
+	}
+	var digest [sha256.Size]byte
+	copy(digest[:], hash.Sum(nil))
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	now := time.Now()

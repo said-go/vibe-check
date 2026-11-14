@@ -11,8 +11,12 @@ foreach ($line in [System.IO.File]::ReadAllLines($envFile)) {
     [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2], 'Process')
 }
 
-if (-not $env:YANDEX_API_KEY -or -not $env:YANDEX_FOLDER_ID) {
-    throw 'Fill YANDEX_API_KEY and YANDEX_FOLDER_ID in backend/.env before starting AI analysis.'
+$privatePresets = Join-Path $backendRoot 'private\photo-presets.json'
+if (-not $env:PHOTO_PRESETS_FILE -and (Test-Path -LiteralPath $privatePresets)) {
+    $env:PHOTO_PRESETS_FILE = $privatePresets
+}
+if ((-not $env:YANDEX_API_KEY -or -not $env:YANDEX_FOLDER_ID) -and -not $env:PHOTO_PRESETS_FILE) {
+    throw 'Fill YANDEX_API_KEY and YANDEX_FOLDER_ID in backend/.env or configure PHOTO_PRESETS_FILE.'
 }
 
 Push-Location -LiteralPath $backendRoot

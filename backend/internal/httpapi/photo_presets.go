@@ -2,10 +2,17 @@ package httpapi
 
 import (
 	"bytes"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
+	"io"
 	"math/bits"
+	"os"
+	"strconv"
 
 	"github.com/said-go/vibe-check/backend/internal/scoring"
 )
@@ -20,36 +27,79 @@ type photoPreset struct {
 	result         scoring.Result
 }
 
-var photoPresets = []photoPreset{
-	{
-		originalSHA256: "f1c8dc5f938b95675b54e169d8139c4166f61e2b1fe807114fcfd44ba64d7624",
-		visualHash:     [4]uint64{0xba26cc62a5482852, 0x3a130c6bf1a1c822, 0xfd53ac8ebc3ece67, 0x55b56d34af42acb3},
-		result: scoring.Result{
-			Status: "completed", PrimaryCategory: scoring.CategoryScore{Code: "chushpan", Title: "Чушпан", Score: 100},
-			Level: "base", LevelTitle: "Уже можно выходить", Score: 58, Confidence: 100,
-			Metrics:         scoring.Metrics{Coherence: 55, Originality: 60, ColorHarmony: 62},
-			Summary:         "Самому не стыдно было присылать такое фото!",
-			Recommendations: []string{"На следующем фото дай одежде чуть больше места в кадре"},
-		},
-	},
-	{
-		originalSHA256: "4b4941958438cac8fb68040995e00f70172f527b6db0c75ecae818f7c6238173",
-		visualHash:     [4]uint64{0xe00e8a4b9d7ee3d9, 0x8006a26ec31aec0e, 0xcb4c96eaa255a802, 0x6d4186b17520ce0d},
-		result: scoring.Result{
-			Status: "completed", PrimaryCategory: scoring.CategoryScore{Code: "pupsik", Title: "Пупсик", Score: 100},
-			Level: "styler", LevelTitle: "Стиляга", Score: 78, Confidence: 100,
-			Metrics:         scoring.Metrics{Coherence: 78, Originality: 72, ColorHarmony: 82},
-			Summary:         "Мягкий человек с доброй душой, но очень наивный",
-			Recommendations: []string{"Один яркий аксессуар — и образ заиграет ещё сильнее"},
-		},
-	},
+// PhotoPresets holds private owner-defined responses loaded once at startup.
+type PhotoPresets []photoPreset
+
+func LoadPhotoPresets(path string) (PhotoPresets, error) {
+	if path == "" {
+		return nil, nil
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, errors.New("cannot open photo preset configuration")
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, (256<<10)+1))
+	if err != nil || len(data) > 256<<10 {
+		return nil, errors.New("photo preset configuration exceeds 256 KiB or cannot be read")
+	}
+	var rows []struct {
+		OriginalSHA256 string         `json:"original_sha256"`
+		VisualHash     []string       `json:"visual_hash"`
+		Result         scoring.Result `json:"result"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&rows); err != nil {
+		return nil, errors.New("invalid photo preset JSON")
+	}
+	if decoder.Decode(&struct{}{}) != io.EOF || len(rows) == 0 || len(rows) > 100 {
+		return nil, errors.New("invalid photo preset configuration")
+	}
+	result := make(PhotoPresets, 0, len(rows))
+	seen := map[string]bool{}
+	for i, row := range rows {
+		bad := func() (PhotoPresets, error) { return nil, fmt.Errorf("invalid photo preset at index %d", i) }
+		digest, err := hex.DecodeString(row.OriginalSHA256)
+		if err != nil || len(digest) != 32 || row.OriginalSHA256 != fmt.Sprintf("%x", digest) || seen[row.OriginalSHA256] || len(row.VisualHash) != 4 {
+			return bad()
+		}
+		seen[row.OriginalSHA256] = true
+		var h [4]uint64
+		for j, v := range row.VisualHash {
+			if len(v) != 16 {
+				return bad()
+			}
+			n, e := strconv.ParseUint(v, 16, 64)
+			if e != nil {
+				return bad()
+			}
+			h[j] = n
+		}
+		r := row.Result
+		if r.Status != "completed" || r.PrimaryCategory.Code == "" || r.PrimaryCategory.Title == "" || r.LevelTitle == "" || r.Summary == "" || len(r.Summary) > 2000 || len(r.PrimaryCategory.Title) > 160 || len(r.LevelTitle) > 160 || len(r.Recommendations) > 5 {
+			return bad()
+		}
+		for _, v := range []int{r.Score, r.Confidence, r.PrimaryCategory.Score, r.Metrics.Coherence, r.Metrics.Originality, r.Metrics.ColorHarmony} {
+			if v < 0 || v > 100 {
+				return bad()
+			}
+		}
+		for _, v := range r.Recommendations {
+			if len(v) > 500 {
+				return bad()
+			}
+		}
+		result = append(result, photoPreset{row.OriginalSHA256, h, r})
+	}
+	return result, nil
 }
 
-func matchPhotoPreset(originalSHA256 string, sanitizedJPEG []byte) (scoring.Result, bool) {
+func (presets PhotoPresets) match(originalSHA256 string, sanitizedJPEG []byte) (scoring.Result, bool) {
 	if len(originalSHA256) != 64 {
 		return scoring.Result{}, false
 	}
-	for _, preset := range photoPresets {
+	for _, preset := range presets {
 		if originalSHA256 != preset.originalSHA256 {
 			continue
 		}

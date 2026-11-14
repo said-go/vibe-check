@@ -143,6 +143,24 @@ func (a *admission) release() {
 	<-l.active
 }
 
+// Retries use the same concurrency slot but consume their own provider budget.
+func (a *admission) chargeAdditional() int {
+	l := a.limiter
+	now := time.Now()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.rollWindows(now)
+	if l.hourCount+l.hourPending >= l.limits.PerHour {
+		return secondsUntil(l.hourStart.Add(time.Hour), now)
+	}
+	if l.clients[a.key]+l.clientPending[a.key] >= l.limits.PerClientMinute {
+		return secondsUntil(l.minuteStart.Add(time.Minute), now)
+	}
+	l.hourCount++
+	l.clients[a.key]++
+	return 0
+}
+
 func clientKey(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err == nil {

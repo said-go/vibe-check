@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/said-go/vibe-check/backend/internal/analysis"
 )
@@ -68,6 +69,11 @@ type yandexRequest struct {
 }
 
 type yandexResponse struct {
+	Usage *struct {
+		InputTokens  int `json:"prompt_tokens"`
+		OutputTokens int `json:"completion_tokens"`
+		TotalTokens  int `json:"total_tokens"`
+	} `json:"usage"`
 	Choices []struct {
 		FinishReason string `json:"finish_reason"`
 		Message      struct {
@@ -79,6 +85,8 @@ type yandexResponse struct {
 }
 
 func (p *Yandex) Analyze(ctx context.Context, sanitizedJPEG []byte) (analysis.VisualFeatures, error) {
+	ctx, cancel := context.WithTimeout(ctx, AnalysisTimeout)
+	defer cancel()
 	if len(sanitizedJPEG) == 0 {
 		return analysis.VisualFeatures{}, ErrInvalidResponse
 	}
@@ -89,11 +97,14 @@ func (p *Yandex) Analyze(ctx context.Context, sanitizedJPEG []byte) (analysis.Vi
 		if err == nil || !errors.Is(err, ErrInvalidResponse) || ctx.Err() != nil || attempt == 1 {
 			return features, err
 		}
+		if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < 15*time.Second {
+			return features, err
+		}
 	}
 	return analysis.VisualFeatures{}, ErrInvalidResponse
 }
 
-func (p *Yandex) analyzeOnce(ctx context.Context, sanitizedJPEG []byte) (analysis.VisualFeatures, error) {
+func (p *Yandex) analyzeOnce(ctx context.Context, sanitizedJPEG []byte) (_features analysis.VisualFeatures, resultErr error) {
 	if p == nil || p.apiKey == "" || p.folderID == "" || p.model == "" || p.client == nil {
 		return analysis.VisualFeatures{}, ErrUnavailable
 	}
@@ -122,14 +133,24 @@ func (p *Yandex) analyzeOnce(ctx context.Context, sanitizedJPEG []byte) (analysi
 	request.Header.Set("Authorization", "Api-Key "+p.apiKey)
 	request.Header.Set("OpenAI-Project", p.folderID)
 	request.Header.Set("Content-Type", "application/json")
+	if err := beforeAttempt(ctx); err != nil {
+		return analysis.VisualFeatures{}, err
+	}
+	info := AttemptInfo{Provider: "yandex"}
+	started := time.Now()
+	defer func() {
+		info.Outcome = attemptOutcome(resultErr)
+		observeAttempt(ctx, info, started)
+	}()
 	response, err := p.client.Do(request)
 	if err != nil {
-		return analysis.VisualFeatures{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return analysis.VisualFeatures{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
+	info.HTTPStatus = response.StatusCode
 	defer response.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(response.Body, 2<<20))
 	if err != nil {
-		return analysis.VisualFeatures{}, fmt.Errorf("%w: read Yandex response: %v", ErrUnavailable, err)
+		return analysis.VisualFeatures{}, fmt.Errorf("%w: read Yandex response: %w", ErrUnavailable, err)
 	}
 	if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden || response.StatusCode == http.StatusNotFound || response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= 500 {
 		return analysis.VisualFeatures{}, fmt.Errorf("%w: status %d", ErrUnavailable, response.StatusCode)
@@ -140,6 +161,10 @@ func (p *Yandex) analyzeOnce(ctx context.Context, sanitizedJPEG []byte) (analysi
 	var envelope yandexResponse
 	if err := json.Unmarshal(data, &envelope); err != nil {
 		return analysis.VisualFeatures{}, fmt.Errorf("%w: %v", ErrInvalidResponse, err)
+	}
+	if envelope.Usage != nil {
+		info.UsageAvailable = true
+		info.InputTokens, info.OutputTokens, info.TotalTokens = envelope.Usage.InputTokens, envelope.Usage.OutputTokens, envelope.Usage.TotalTokens
 	}
 	if len(envelope.Choices) != 1 {
 		return analysis.VisualFeatures{}, ErrInvalidResponse

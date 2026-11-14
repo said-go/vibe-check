@@ -18,6 +18,9 @@ let photoGeneration = 0;
 let deferredInstallPrompt = null;
 let focusBeforeModal = null;
 let availabilityGeneration = 0;
+let lastPhotoSource = 'file';
+let retryTimer = null;
+let retryUntil = 0;
 const API_BASE = (window.VIBE_API_BASE_URL || '/api').replace(/\/$/, '');
 const MAX_UPLOAD_BYTES = 2.5 * 1024 * 1024;
 async function originalHashForFile(file) {
@@ -30,6 +33,7 @@ const steps = ['capture-step', 'consent-step', 'analyzing-step', 'error-step', '
 async function compressedJPEG() {
   const output = document.createElement('canvas');
   for (const scale of [1, .75, .56]) {
+    if (Math.min(canvas.width, canvas.height) * scale < 128) continue;
     output.width = Math.max(1, Math.round(canvas.width * scale));
     output.height = Math.max(1, Math.round(canvas.height * scale));
     output.getContext('2d').drawImage(canvas, 0, 0, output.width, output.height);
@@ -56,7 +60,7 @@ function showStep(id) {
   modal.setAttribute('aria-labelledby', heading.id);
   heading.focus();
 }
-function cancelRequest() { requestGeneration++; activeRequest?.abort(); activeRequest = null; }
+function cancelRequest() { requestGeneration++; activeRequest?.abort(); activeRequest = null; clearInterval(retryTimer); retryTimer = null; retryUntil = 0; $('#retry-analysis').disabled = false; $('#retry-analysis').textContent = 'Попробовать ещё раз'; }
 function clearPhoto() { photoGeneration++; currentFile = null; currentOriginalHash = ''; currentImage = ''; analysisKey = ''; currentRecord = null; currentCardBlob = null; $('#consent-image').removeAttribute('src'); $('#analysis-image').removeAttribute('src'); $('#result-image').removeAttribute('src'); canvas.width = 0; canvas.height = 0; }
 
 function openModal(withCamera = true, returnFocus = document.activeElement) {
@@ -84,6 +88,7 @@ function stopCamera() {
 function resetFlow() { showStep('capture-step'); $('#share-note').textContent = ''; $('#privacy-consent').checked = false; $('#start-analysis').disabled = true; $('#consent-error').textContent = ''; }
 
 async function startCamera() {
+  lastPhotoSource = 'camera';
   stopCamera();
   const generation = cameraGeneration;
   $('#camera-error').textContent = '';
@@ -105,6 +110,7 @@ async function startCamera() {
 
 async function useFile(file) {
   if (!file) return;
+  lastPhotoSource = 'file';
   cancelRequest(); clearPhoto(); stopCamera();
   if (file.size > 25 * 1024 * 1024) {
     showError('Фото слишком большое. Выбери файл до 25 МБ.', false); return;
@@ -122,6 +128,9 @@ async function useFile(file) {
     const scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
     canvas.width = Math.round(image.naturalWidth * scale);
     canvas.height = Math.round(image.naturalHeight * scale);
+    if (Math.min(canvas.width, canvas.height) < 128) {
+      showError('Фото слишком вытянутое. Обрежь лишние края, чтобы человек занимал больше кадра.', false); return;
+    }
     ctx.fillStyle = '#f5f1ea';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
@@ -185,28 +194,47 @@ const errorMessages = {
   invalid_ai_response: 'Ответ AI не удалось проверить. Попробуй ещё раз.'
 };
 const lowConfidenceMessages = {
-  single_person_required: 'AI не увидел в кадре ровно одного человека. Сфотографируйся один, чтобы одежда была хорошо видна.',
+  single_person_required: 'На фото должен быть один человек. Выбери кадр, где он хорошо виден.',
   image_quality_too_low: 'Качество кадра недостаточно для анализа. Сделай более чёткое фото при хорошем освещении.',
-  outfit_visibility_too_low: 'Одежда видна недостаточно хорошо. Отойди от камеры и покажи образ целиком.',
-  ai_confidence_too_low: 'AI не смог уверенно распознать детали одежды. Попробуй другой ракурс и ровный свет.'
+  outfit_visibility_too_low: 'На фото не видно достаточно деталей образа. Попробуй другой ракурс, чтобы были видны одежда или причёска.',
+  ai_confidence_too_low: 'AI не смог уверенно разобрать детали на этом фото. Попробуй другой ракурс и ровный свет.'
 };
-function showError(message, retryable = true) {
+function showError(message, retryable = true, retryAfter = null) {
+  clearInterval(retryTimer);
+  retryUntil = 0;
   $('#error-title').textContent = 'НЕ ПОЛУЧИЛОСЬ';
   $('#error-description').textContent = message;
   $('#retry-analysis').hidden = !retryable || !currentFile;
+  $('#retry-analysis').disabled = false;
+  $('#retry-analysis').textContent = 'Попробовать ещё раз';
+  if (retryable && retryAfter) {
+    const seconds = /^\d+$/.test(retryAfter) ? Number(retryAfter) : Math.ceil((Date.parse(retryAfter) - Date.now()) / 1000);
+    if (Number.isFinite(seconds) && seconds > 0) {
+      retryUntil = Date.now() + Math.min(seconds, 86400) * 1000;
+      const tick = () => {
+        const left = Math.max(0, Math.ceil((retryUntil - Date.now()) / 1000));
+        $('#retry-analysis').disabled = left > 0;
+        $('#retry-analysis').textContent = left ? `Повторить через ${left} с` : 'Попробовать ещё раз';
+        if (!left) { clearInterval(retryTimer); retryTimer = null; }
+      };
+      tick(); retryTimer = setInterval(tick, 1000);
+    }
+  }
   showStep('error-step');
 }
 async function analysisReady(signal) {
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener('abort', abort, { once: true });
+  if (signal?.aborted) abort();
   const timeout = setTimeout(abort, 15000);
   try {
     const response = await fetch(`${API_BASE}/readyz?check=${Date.now()}`, {
       headers: { Accept: 'application/json' }, cache: 'no-store', signal: controller.signal
     });
     if (!response.ok || !response.headers.get('Content-Type')?.toLowerCase().includes('application/json')) return false;
-    return (await response.json()).status === 'ready';
+    const data = await response.json();
+    return data.status === 'ready' ? data : false;
   } catch {
     return false;
   } finally {
@@ -226,18 +254,22 @@ async function refreshAvailability() {
   status.textContent = 'Проверяем доступность AI-анализа…';
   const ready = await analysisReady();
   if (generation !== availabilityGeneration) return;
-  status.textContent = ready ? 'Сервер AI-анализа подключён.' : 'AI-анализ пока не подключён. Интерфейс доступен для просмотра.';
+  status.textContent = ready ? (ready.ai_available === false ? 'Сервер доступен. AI-анализ временно недоступен; часть результатов может быть доступна.' : 'Сервер AI-анализа подключён.') : 'AI-анализ пока не подключён. Интерфейс доступен для просмотра.';
   status.classList.add(ready ? 'available' : 'unavailable');
 }
 async function analyze() {
   if (!currentFile || !$('#privacy-consent').checked) return;
+  if (activeRequest || Date.now() < retryUntil) return;
   if (!navigator.onLine) { showError('Для нового AI-анализа нужен интернет.', true); return; }
   cancelRequest(); const generation = requestGeneration; const controller = new AbortController(); activeRequest = controller;
+  let timedOut = false;
+  const deadline = setTimeout(() => { timedOut = true; controller.abort(); }, 125000);
   showStep('analyzing-step'); $('#analysis-image').src = currentImage;
   $('#analysis-status').textContent = 'Проверяем сервер анализа'; $('#progress-bar').style.width = '15%';
   try {
     const ready = await analysisReady(controller.signal);
     if (generation !== requestGeneration || modal.hidden) return;
+    if (timedOut) throw new Error('analysis_timeout');
     if (!ready) {
       showError('AI-анализ пока не подключён. Фото не отправлено — попробуй позже.', true);
       refreshAvailability();
@@ -254,21 +286,33 @@ async function analyze() {
       const error = data.error || data;
       const unavailable = [404, 502, 503, 504].includes(response.status);
       const message = response.status === 429 ? 'Слишком много запросов подряд. Подожди немного и попробуй снова.' : errorMessages[error.code] || (unavailable ? 'Сервер AI-анализа сейчас недоступен. Попробуй позже.' : 'Не удалось завершить анализ. Попробуй ещё раз.');
-      showError(message, response.status === 429 || unavailable || !!error.retryable);
+      showError(message, response.status === 429 || unavailable || !!error.retryable, response.headers.get('Retry-After'));
       return;
     }
-    if (!data.result || !['completed', 'low_confidence'].includes(data.status)) throw new Error('invalid_response');
+    if (!data || !data.result || !['completed', 'low_confidence'].includes(data.status)) throw new Error('invalid_response');
     $('#progress-bar').style.width = '100%';
     if (data.status === 'low_confidence') {
       showError(lowConfidenceMessages[data.result.low_confidence_reason] || 'Не удалось уверенно определить образ. Попробуй другое фото при хорошем освещении.', false);
       return;
     }
-    showResult(data.result, data.analysis_id);
+    const result = data.result;
+    const percentage = value => Number.isFinite(value) && value >= 0 && value <= 100;
+    if (typeof data.analysis_id !== 'string' || !data.analysis_id ||
+        typeof result.primary_category?.title !== 'string' || !result.primary_category.title ||
+        typeof result.level_title !== 'string' || typeof result.summary !== 'string' ||
+        !percentage(result.score) || !['coherence', 'originality', 'color_harmony'].every(key => percentage(result.metrics?.[key]))) {
+      throw new Error('invalid_response');
+    }
+    showResult(result, data.analysis_id);
   } catch (error) {
+    if (timedOut && generation === requestGeneration && !modal.hidden) {
+      showError('Анализ занял слишком много времени. Попробуй повторить запрос.', true);
+      return;
+    }
     if (error.name !== 'AbortError' && generation === requestGeneration && !modal.hidden) {
       showError(error.message === 'invalid_response' ? 'Сервер AI-анализа пока не настроен или вернул неверный ответ.' : 'Нет связи с сервером анализа. Проверь интернет и попробуй ещё раз.', true);
     }
-  } finally { if (generation === requestGeneration) activeRequest = null; }
+  } finally { clearTimeout(deadline); if (generation === requestGeneration) activeRequest = null; }
 }
 function showResult(result, analysisId) {
   currentRecord = window.VIBE_HISTORY.prepare(analysisId, result);
@@ -417,7 +461,7 @@ $('#capture').addEventListener('click', capture);
 $('#privacy-consent').addEventListener('change', e => { $('#start-analysis').disabled = !e.target.checked; });
 $('#start-analysis').addEventListener('click', analyze);
 $('#retry-analysis').addEventListener('click', analyze);
-function chooseAgain() { cancelRequest(); clearPhoto(); resetFlow(); startCamera(); }
+function chooseAgain() { cancelRequest(); clearPhoto(); resetFlow(); if (lastPhotoSource === 'camera') startCamera(); else { stopCamera(); $('#modal-file').click(); } }
 $('#choose-again').addEventListener('click', chooseAgain);
 $('#error-choose-again').addEventListener('click', chooseAgain);
 $('#again').addEventListener('click', chooseAgain);
@@ -501,7 +545,7 @@ if ('serviceWorker' in navigator) {
   const hadServiceWorkerController = Boolean(navigator.serviceWorker.controller);
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!hadServiceWorkerController && !updateRequested) return;
-    if (updateRequested) window.location.reload();
+    if (updateRequested && modal.hidden) window.location.reload();
     else { updateReadyToReload = true; showPendingUpdate(); }
   });
   window.addEventListener('load', async () => {

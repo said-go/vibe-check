@@ -76,7 +76,7 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 		}
 		return ranked[i].Score > ranked[j].Score
 	})
-	if features.GentleSmile {
+	if features.GentleSmile && !strongOutfitStyle(features, ranked[0]) {
 		ranked = append([]CategoryScore{{Code: "pupsik", Title: "Пупсик", Score: 100}}, ranked...)
 	}
 	if features.SeriousIndexPose {
@@ -125,10 +125,46 @@ func (e *Engine) Evaluate(features analysis.VisualFeatures) (Result, error) {
 		result.LowConfidenceReason = reason
 		result.PrimaryCategory = CategoryScore{}
 		result.SecondaryCategory = CategoryScore{}
-		result.Summary = "Не разглядели одежду. Покажи её на другом фото."
-		result.Recommendations = []string{"Покажи хотя бы одну вещь одежды", "Оставь в кадре одного человека"}
+		result.Score, result.Confidence = 0, features.Confidence
+		result.Level, result.LevelTitle = "", ""
+		result.Metrics = Metrics{}
+		switch reason {
+		case "single_person_required":
+			result.Summary = "Нужен кадр с одним человеком, чтобы не смешать разные образы."
+			result.Recommendations = []string{"Выбери фото с одним человеком или обрежь кадр"}
+		case "ai_confidence_too_low":
+			result.Summary = "Детали пока не удалось уверенно разобрать. Попробуй другой кадр."
+			result.Recommendations = []string{"Покажи видимые детали образа на другом фото"}
+		default:
+			result.Summary = "Не разглядели одежду. Покажи её на другом фото."
+			result.Recommendations = []string{"Покажи хотя бы одну вещь одежды"}
+		}
 	}
 	return result, nil
+}
+
+// A smile can provide a playful verdict for an otherwise ordinary outfit,
+// but must not erase a clearly evidenced clothing category.
+func strongOutfitStyle(f analysis.VisualFeatures, category CategoryScore) bool {
+	if category.Score < 65 {
+		return false
+	}
+	switch category.Code {
+	case "goth":
+		return f.Signals.Goth >= 75
+	case "alternative":
+		return f.Signals.Alternative >= 75
+	case "retro_90s":
+		return f.Signals.Retro90s >= 75
+	case "sport_chic":
+		return f.Signals.SportChic >= 75
+	case "streetwear":
+		return f.Signals.Streetwear >= 75
+	case "urban_classic":
+		return f.Signals.Classic >= 75 && f.Formality >= 75
+	default:
+		return false
+	}
 }
 
 func alternativeDetails(f analysis.VisualFeatures) string {

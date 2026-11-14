@@ -29,5 +29,9 @@ jobs:
           node --check dist/history.js
           node --check dist/share-card.js
           node --check dist/sw.js
+      - name: PWA release consistency and behavior
+        run: |
+          node scripts/build-pwa.mjs --check
+          node --test tests/*.test.cjs
       - name: Production image build
         run: docker build --tag vibe-check:ci .

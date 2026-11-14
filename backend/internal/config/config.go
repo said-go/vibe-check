@@ -20,6 +20,7 @@ type Config struct {
 	AnalysesPerClientMinute int64
 	MaxConcurrentAnalyses   int64
 	FrontendDir             string
+	PhotoPresetsFile        string
 	AIProvider              string
 	YandexAPIKey            string
 	YandexFolderID          string
@@ -44,6 +45,7 @@ func Load() (Config, error) {
 		AnalysesPerClientMinute: integer("ANALYSES_PER_CLIENT_MINUTE", 3),
 		MaxConcurrentAnalyses:   integer("MAX_CONCURRENT_ANALYSES", 2),
 		FrontendDir:             env("FRONTEND_DIR", "../dist"),
+		PhotoPresetsFile:        os.Getenv("PHOTO_PRESETS_FILE"),
 		AIProvider:              env("AI_PROVIDER", "yandex"),
 		YandexAPIKey:            os.Getenv("YANDEX_API_KEY"),
 		YandexFolderID:          os.Getenv("YANDEX_FOLDER_ID"),
@@ -89,10 +91,10 @@ func (c Config) Validate() error {
 	if c.OpenAITimeout <= 0 || c.OpenAITimeout > 2*time.Minute {
 		return errors.New("OPENAI_TIMEOUT must be positive and at most 2 minutes")
 	}
-	if c.Environment == "production" && c.AIProvider == "openai" && (c.OpenAIAPIKey == "" || c.OpenAIModel == "") {
+	if c.Environment == "production" && c.PhotoPresetsFile == "" && c.AIProvider == "openai" && (c.OpenAIAPIKey == "" || c.OpenAIModel == "") {
 		return errors.New("OPENAI_API_KEY and OPENAI_MODEL are required in production")
 	}
-	if c.Environment == "production" && c.AIProvider == "yandex" && (c.YandexAPIKey == "" || c.YandexFolderID == "") {
+	if c.Environment == "production" && c.PhotoPresetsFile == "" && c.AIProvider == "yandex" && (c.YandexAPIKey == "" || c.YandexFolderID == "") {
 		return errors.New("YANDEX_API_KEY and YANDEX_FOLDER_ID are required in production")
 	}
 	if c.OpenAIBaseURL == "" {

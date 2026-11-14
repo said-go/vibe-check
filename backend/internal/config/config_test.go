@@ -21,6 +21,7 @@ func TestValidateRejectsInvalidConfiguration(t *testing.T) {
 }
 
 func TestLoadYandexDefaultsAndProductionCredentials(t *testing.T) {
+	t.Setenv("PHOTO_PRESETS_FILE", "")
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("AI_PROVIDER", "yandex")
 	t.Setenv("HTTP_READ_TIMEOUT", "")
@@ -43,6 +44,18 @@ func TestLoadYandexDefaultsAndProductionCredentials(t *testing.T) {
 	t.Setenv("YANDEX_FOLDER_ID", "")
 	if _, err := Load(); err == nil {
 		t.Fatal("production must reject missing Yandex folder ID")
+	}
+}
+
+func TestProductionAllowsPrivatePresetsWithoutAICredentials(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("AI_PROVIDER", "yandex")
+	t.Setenv("YANDEX_API_KEY", "")
+	t.Setenv("YANDEX_FOLDER_ID", "")
+	t.Setenv("PHOTO_PRESETS_FILE", "private/synthetic.json")
+	cfg, err := Load()
+	if err != nil || cfg.PhotoPresetsFile != "private/synthetic.json" {
+		t.Fatalf("private presets configuration rejected: %v", err)
 	}
 }
 

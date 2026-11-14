@@ -17,12 +17,18 @@ foreach ($check in @(
 )) {
     $url = "$origin$($check.Path)"
     try {
-        $response = Invoke-WebRequest -Uri $url -Method Get -TimeoutSec 15 -MaximumRedirection 0
+        $response = Invoke-WebRequest -Uri $url -Method Get -UseBasicParsing -TimeoutSec 15 -MaximumRedirection 0
     } catch {
         throw "Smoke check failed for $($check.Path): $($_.Exception.Message)"
     }
     if ($response.StatusCode -ne 200) { throw "Unexpected status $($response.StatusCode) for $($check.Path)." }
     if ($check.Type -and $response.Headers['Content-Type'] -notlike "$($check.Type)*") { throw "Unexpected Content-Type for $($check.Path)." }
+    if ($check.Path -eq '/api/readyz') {
+        try { $ready = $response.Content | ConvertFrom-Json -ErrorAction Stop }
+        catch { throw 'Readiness response is not valid JSON.' }
+        if ($ready.status -ne 'ready') { throw 'Application is not ready.' }
+        if ($ready.ai_available -ne $true) { throw 'Application can serve private presets, but AI is not configured. Complete AI configuration before live AI testing.' }
+    }
     if ($check.Path -eq '/manifest.webmanifest') {
         try { $manifest = $response.Content | ConvertFrom-Json -ErrorAction Stop }
         catch { throw 'PWA manifest is not valid JSON.' }

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"encoding/json"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -9,6 +10,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -46,21 +49,19 @@ func TestPhotoPresetRequiresBothDigestAndVisualMatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	previous := photoPresets
-	photoPresets = []photoPreset{{originalSHA256: strings.Repeat("a", 64), visualHash: hash, result: scoring.Result{Status: "completed", PrimaryCategory: scoring.CategoryScore{Title: "Test preset"}}}}
-	t.Cleanup(func() { photoPresets = previous })
+	presets := PhotoPresets{{originalSHA256: strings.Repeat("a", 64), visualHash: hash, result: scoring.Result{Status: "completed", PrimaryCategory: scoring.CategoryScore{Title: "Test preset"}}}}
 
-	if got, ok := matchPhotoPreset(strings.Repeat("a", 64), sanitized.JPEG); !ok || got.PrimaryCategory.Title != "Test preset" {
+	if got, ok := presets.match(strings.Repeat("a", 64), sanitized.JPEG); !ok || got.PrimaryCategory.Title != "Test preset" {
 		t.Fatalf("expected preset result, got %#v, matched=%v", got, ok)
 	}
-	if _, ok := matchPhotoPreset(strings.Repeat("b", 64), sanitized.JPEG); ok {
+	if _, ok := presets.match(strings.Repeat("b", 64), sanitized.JPEG); ok {
 		t.Fatal("wrong digest matched")
 	}
 	other, err := imageproc.New().Sanitize(bytes.NewReader(patternedImage(t, true)), "image/jpeg")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := matchPhotoPreset(strings.Repeat("a", 64), other.JPEG); ok {
+	if _, ok := presets.match(strings.Repeat("a", 64), other.JPEG); ok {
 		t.Fatal("unrelated image with claimed digest matched")
 	}
 }
@@ -75,10 +76,13 @@ func TestPhotoPresetSkipsProviderAndSpoofedDigestDoesNot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	previous := photoPresets
-	photoPresets = []photoPreset{{originalSHA256: strings.Repeat("a", 64), visualHash: hash, result: scoring.Result{Status: "completed", PrimaryCategory: scoring.CategoryScore{Code: "preset", Title: "Test preset"}}}}
-	t.Cleanup(func() { photoPresets = previous })
-	handler := New(slog.New(slog.NewTextHandler(io.Discard, nil)), 10<<20, vision.Unconfigured{})
+	presets := PhotoPresets{{originalSHA256: strings.Repeat("a", 64), visualHash: hash, result: scoring.Result{Status: "completed", PrimaryCategory: scoring.CategoryScore{Code: "preset", Title: "Test preset"}}}}
+	handler := NewWithPresets(slog.New(slog.NewTextHandler(io.Discard, nil)), 10<<20, vision.Unconfigured{}, DefaultLimits, presets)
+	ready := httptest.NewRecorder()
+	handler.ServeHTTP(ready, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if ready.Code != 200 || !strings.Contains(ready.Body.String(), `"ai_available":false`) || !strings.Contains(ready.Body.String(), `"presets_available":true`) {
+		t.Fatalf("presets-only readiness: %d %s", ready.Code, ready.Body.String())
+	}
 	request := makeImageRequest(t, []string{"true"}, [][]byte{photo}, "image/jpeg")
 	request.Header.Set("X-Original-Image-SHA256", strings.Repeat("a", 64))
 	response := httptest.NewRecorder()
@@ -92,5 +96,50 @@ func TestPhotoPresetSkipsProviderAndSpoofedDigestDoesNot(t *testing.T) {
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("spoofed digest should use normal provider path: status %d, body %s", response.Code, response.Body.String())
+	}
+}
+
+func TestLoadPhotoPresetsValidation(t *testing.T) {
+	valid := map[string]any{"original_sha256": strings.Repeat("a", 64), "visual_hash": []string{"0000000000000000", "0000000000000001", "0000000000000002", "0000000000000003"}, "result": scoring.Result{Status: "completed", Score: 50, Confidence: 80, PrimaryCategory: scoring.CategoryScore{Code: "synthetic", Title: "Synthetic", Score: 50}, LevelTitle: "Synthetic", Summary: "Synthetic fixture"}}
+	encode := func(rows any) []byte {
+		data, err := json.Marshal(rows)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+	validBytes := encode([]any{valid})
+	for _, tc := range []struct {
+		name string
+		data []byte
+		ok   bool
+	}{
+		{"valid", validBytes, true}, {"empty", []byte("[]"), false}, {"null", []byte("null"), false}, {"malformed", []byte("{"), false},
+		{"unknown field", []byte(strings.Replace(string(validBytes), `"original_sha256"`, `"unknown"`, 1)), false},
+		{"bad digest", []byte(strings.Replace(string(validBytes), strings.Repeat("a", 64), "invalid", 1)), false},
+		{"bad hash", []byte(strings.Replace(string(validBytes), "0000000000000003", "invalid", 1)), false},
+		{"bad result", []byte(strings.Replace(string(validBytes), `"score":50`, `"score":101`, 1)), false},
+		{"duplicate", encode([]any{valid, valid}), false}, {"trailing", append(append([]byte{}, validBytes...), []byte(" {}")...), false},
+		{"oversized", bytes.Repeat([]byte(" "), (256<<10)+1), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "presets.json")
+			if err := os.WriteFile(path, tc.data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			got, err := LoadPhotoPresets(path)
+			if (err == nil) != tc.ok {
+				t.Fatalf("load: %v", err)
+			}
+			if tc.name == "valid" && len(got) != 1 {
+				t.Fatal("expected synthetic preset")
+			}
+		})
+	}
+	if got, err := LoadPhotoPresets(""); err != nil || len(got) != 0 {
+		t.Fatal("empty path must disable presets")
+	}
+	if _, err := LoadPhotoPresets(filepath.Join(t.TempDir(), "missing")); err == nil {
+		t.Fatal("missing file accepted")
 	}
 }

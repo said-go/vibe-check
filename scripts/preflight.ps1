@@ -21,13 +21,27 @@ function Run-Checked([string]$Executable, [string[]]$Arguments) {
 }
 
 function Test-DockerDaemon {
-    $previousPreference = $ErrorActionPreference
+    $probe = New-Object System.Diagnostics.Process
+    $probe.StartInfo.FileName = (Get-Command docker).Source
+    $probe.StartInfo.Arguments = 'info --format {{.Server.Version}}'
+    $probe.StartInfo.UseShellExecute = $false
+    $probe.StartInfo.CreateNoWindow = $true
+    $probe.StartInfo.RedirectStandardOutput = $true
+    $probe.StartInfo.RedirectStandardError = $true
     try {
-        $ErrorActionPreference = 'Continue'
-        & docker info --format '{{.Server.Version}}' 2>$null | Out-Null
-        return $LASTEXITCODE -eq 0
+        if (-not $probe.Start()) { return $false }
+        $stdout = $probe.StandardOutput.ReadToEndAsync()
+        $stderr = $probe.StandardError.ReadToEndAsync()
+        if (-not $probe.WaitForExit(8000)) {
+            $probe.Kill()
+            Write-Host 'Docker daemon did not answer within 8 seconds.'
+            return $false
+        }
+        return $probe.ExitCode -eq 0
+    } catch {
+        return $false
     } finally {
-        $ErrorActionPreference = $previousPreference
+        $probe.Dispose()
     }
 }
 
@@ -46,6 +60,9 @@ Run-Checked 'node' @('--check', (Join-Path $projectRoot 'dist/app.js'))
 Run-Checked 'node' @('--check', (Join-Path $projectRoot 'dist/history.js'))
 Run-Checked 'node' @('--check', (Join-Path $projectRoot 'dist/share-card.js'))
 Run-Checked 'node' @('--check', (Join-Path $projectRoot 'dist/sw.js'))
+Run-Checked 'node' @((Join-Path $projectRoot 'scripts/build-pwa.mjs'), '--check')
+$frontendTests = @(Get-ChildItem -LiteralPath (Join-Path $projectRoot 'tests') -Filter '*.test.cjs' | ForEach-Object { $_.FullName })
+Run-Checked 'node' (@('--test') + $frontendTests)
 
 if ($BuildImage) {
     Assert-Tool 'docker'

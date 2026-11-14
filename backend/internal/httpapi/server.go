@@ -28,6 +28,7 @@ type Server struct {
 	configured      bool
 	limiter         *requestLimiter
 	idempotency     *idempotencyCache
+	presets         PhotoPresets
 }
 
 func New(logger *slog.Logger, maxRequestBytes int64, provider vision.Provider) http.Handler {
@@ -35,6 +36,10 @@ func New(logger *slog.Logger, maxRequestBytes int64, provider vision.Provider) h
 }
 
 func NewWithLimits(logger *slog.Logger, maxRequestBytes int64, provider vision.Provider, limits Limits) http.Handler {
+	return NewWithPresets(logger, maxRequestBytes, provider, limits, nil)
+}
+
+func NewWithPresets(logger *slog.Logger, maxRequestBytes int64, provider vision.Provider, limits Limits, presets PhotoPresets) http.Handler {
 	if provider == nil {
 		provider = vision.Unconfigured{}
 	}
@@ -44,6 +49,7 @@ func NewWithLimits(logger *slog.Logger, maxRequestBytes int64, provider vision.P
 		configured = false
 	}
 	server := &Server{logger: logger, engine: scoring.NewEngine(), vision: provider, images: imageproc.New(), maxRequestBytes: maxRequestBytes, configured: configured, limiter: newRequestLimiter(limits), idempotency: newIdempotencyCache()}
+	server.presets = append(PhotoPresets(nil), presets...)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", server.health)
 	mux.HandleFunc("GET /readyz", server.ready)
@@ -55,11 +61,11 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 func (s *Server) ready(w http.ResponseWriter, _ *http.Request) {
-	if !s.configured {
+	if !s.configured && len(s.presets) == 0 {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "ai_unavailable"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ready", "ai_available": s.configured, "presets_available": len(s.presets) > 0})
 }
 
 type analysisResponse struct {
@@ -176,7 +182,7 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 	if len(idempotencyValues) == 1 {
 		idempotencyKey = idempotencyValues[0]
 		var state idempotencyState
-		idempotencyEntry, state = s.idempotency.begin(idempotencyKey, sanitized.JPEG)
+		idempotencyEntry, state = s.idempotency.begin(idempotencyKey, sanitized.JPEG, r.Header.Get("X-Original-Image-SHA256"))
 		switch state {
 		case idempotencyConflict:
 			s.writeError(w, r, http.StatusConflict, "idempotency_conflict", "Idempotency-Key was used with a different image", false)
@@ -201,7 +207,7 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 		}
 		s.writeAnalysisOutcome(w, r, outcome)
 	}
-	if result, ok := matchPhotoPreset(r.Header.Get("X-Original-Image-SHA256"), sanitized.JPEG); ok {
+	if result, ok := s.presets.match(r.Header.Get("X-Original-Image-SHA256"), sanitized.JPEG); ok {
 		complete(analysisOutcome{result: result, analysisID: requestIDFrom(r)})
 		return
 	}
@@ -213,7 +219,29 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 		complete(analysisOutcome{rateLimited: true, retryAfter: retryAfter})
 		return
 	}
-	features, err := s.vision.Analyze(r.Context(), sanitized.JPEG)
+	firstAttempt := true
+	var providerRetryAfter int
+	attempts := 0
+	ctx := vision.WithAttemptGuard(r.Context(), func() error {
+		if firstAttempt {
+			firstAttempt = false
+			return nil
+		}
+		providerRetryAfter = reservation.chargeAdditional()
+		if providerRetryAfter > 0 {
+			return vision.ErrRateLimited
+		}
+		return nil
+	})
+	ctx = vision.WithAttemptObserver(ctx, func(info vision.AttemptInfo) {
+		attempts++
+		s.logger.Info("provider_attempt", "request_id", requestIDFrom(r), "attempt", attempts, "provider", info.Provider, "status", info.HTTPStatus, "outcome", info.Outcome, "duration_ms", info.Duration.Milliseconds(), "usage_available", info.UsageAvailable, "input_tokens", info.InputTokens, "output_tokens", info.OutputTokens, "total_tokens", info.TotalTokens)
+	})
+	features, err := s.vision.Analyze(ctx, sanitized.JPEG)
+	if providerRetryAfter > 0 && errors.Is(err, vision.ErrRateLimited) {
+		complete(analysisOutcome{rateLimited: true, retryAfter: providerRetryAfter})
+		return
+	}
 	if err != nil {
 		complete(analysisOutcome{visionErr: err})
 		return
@@ -337,10 +365,32 @@ func newRequestID() string {
 func (s *Server) accessLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		started := time.Now()
-		next.ServeHTTP(w, r)
-		s.logger.Info("http_request", "method", r.Method, "path", r.URL.Path, "request_id", requestIDFrom(r), "duration_ms", time.Since(started).Milliseconds())
+		recorded := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(recorded, r)
+		s.logger.Info("http_request", "method", r.Method, "path", r.URL.Path, "request_id", requestIDFrom(r), "status", recorded.status, "duration_ms", time.Since(started).Milliseconds())
 	})
 }
+
+type statusWriter struct {
+	http.ResponseWriter
+	status int
+	wrote  bool
+}
+
+func (w *statusWriter) WriteHeader(status int) {
+	if !w.wrote {
+		w.status = status
+		w.wrote = true
+		w.ResponseWriter.WriteHeader(status)
+	}
+}
+func (w *statusWriter) Write(data []byte) (int, error) {
+	if !w.wrote {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(data)
+}
+func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 func (s *Server) recoverPanic(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {

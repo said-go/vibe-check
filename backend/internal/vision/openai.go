@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/said-go/vibe-check/backend/internal/analysis"
 )
@@ -68,6 +69,11 @@ type responseRequest struct {
 }
 
 type responseEnvelope struct {
+	Usage *struct {
+		InputTokens  int `json:"input_tokens"`
+		OutputTokens int `json:"output_tokens"`
+		TotalTokens  int `json:"total_tokens"`
+	} `json:"usage"`
 	Status string `json:"status"`
 	Error  *struct {
 		Code    string `json:"code"`
@@ -83,7 +89,9 @@ type responseEnvelope struct {
 	} `json:"output"`
 }
 
-func (p *OpenAI) Analyze(ctx context.Context, sanitizedJPEG []byte) (analysis.VisualFeatures, error) {
+func (p *OpenAI) Analyze(ctx context.Context, sanitizedJPEG []byte) (_features analysis.VisualFeatures, resultErr error) {
+	ctx, cancel := context.WithTimeout(ctx, AnalysisTimeout)
+	defer cancel()
 	if p.apiKey == "" || p.model == "" || p.client == nil {
 		return analysis.VisualFeatures{}, ErrUnavailable
 	}
@@ -102,14 +110,24 @@ func (p *OpenAI) Analyze(ctx context.Context, sanitizedJPEG []byte) (analysis.Vi
 	}
 	request.Header.Set("Authorization", "Bearer "+p.apiKey)
 	request.Header.Set("Content-Type", "application/json")
+	if err := beforeAttempt(ctx); err != nil {
+		return analysis.VisualFeatures{}, err
+	}
+	info := AttemptInfo{Provider: "openai"}
+	started := time.Now()
+	defer func() {
+		info.Outcome = attemptOutcome(resultErr)
+		observeAttempt(ctx, info, started)
+	}()
 	response, err := p.client.Do(request)
 	if err != nil {
-		return analysis.VisualFeatures{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return analysis.VisualFeatures{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
+	info.HTTPStatus = response.StatusCode
 	defer response.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(response.Body, 2<<20))
 	if err != nil {
-		return analysis.VisualFeatures{}, fmt.Errorf("read OpenAI response: %w", err)
+		return analysis.VisualFeatures{}, fmt.Errorf("%w: read OpenAI response: %w", ErrUnavailable, err)
 	}
 	if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden || response.StatusCode == http.StatusNotFound || response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= 500 {
 		return analysis.VisualFeatures{}, fmt.Errorf("%w: status %d", ErrUnavailable, response.StatusCode)
@@ -120,6 +138,10 @@ func (p *OpenAI) Analyze(ctx context.Context, sanitizedJPEG []byte) (analysis.Vi
 	var envelope responseEnvelope
 	if err := json.Unmarshal(data, &envelope); err != nil {
 		return analysis.VisualFeatures{}, fmt.Errorf("%w: %v", ErrInvalidResponse, err)
+	}
+	if envelope.Usage != nil {
+		info.UsageAvailable = true
+		info.InputTokens, info.OutputTokens, info.TotalTokens = envelope.Usage.InputTokens, envelope.Usage.OutputTokens, envelope.Usage.TotalTokens
 	}
 	if envelope.Error != nil {
 		return analysis.VisualFeatures{}, fmt.Errorf("%w: %s", ErrRejected, envelope.Error.Code)

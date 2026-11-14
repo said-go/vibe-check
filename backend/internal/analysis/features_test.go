@@ -79,18 +79,29 @@ func TestLowConfidenceRules(t *testing.T) {
 	features.OutfitVisibility = 40
 	features.ImageQuality = 30
 	features.Confidence = 35
-	features.PersonCount = 0
+	features.PersonCount = 1
 	if reason := features.LowConfidenceReason(); reason != "" {
 		t.Fatalf("partial or lower-quality outfit should be accepted, got %q", reason)
 	}
 	features.PersonCount = 2
-	if reason := features.LowConfidenceReason(); reason != "" {
-		t.Fatalf("model person count should not reject visible clothing, got %q", reason)
+	if reason := features.LowConfidenceReason(); reason != "single_person_required" {
+		t.Fatalf("multiple people must not produce a merged verdict, got %q", reason)
+	}
+	features.PersonCount = 0
+	if reason := features.LowConfidenceReason(); reason != "single_person_required" {
+		t.Fatalf("no person: %q", reason)
+	}
+	features.PersonCount = 1
+	features.OutfitVisibility = 0
+	if reason := features.LowConfidenceReason(); reason != "outfit_visibility_too_low" {
+		t.Fatalf("invisible clothing must not produce a clothing score, got %q", reason)
+	}
+	features.OutfitVisibility = 40
+	features.Confidence = 1
+	if reason := features.LowConfidenceReason(); reason != "ai_confidence_too_low" {
+		t.Fatalf("confidence 1: %q", reason)
 	}
 	features.OutfitVisibility = 0
-	if reason := features.LowConfidenceReason(); reason != "" {
-		t.Fatalf("a single low visibility estimate should not reject clothing, got %q", reason)
-	}
 	features.Confidence = 0
 	features.OutfitCoherence = 0
 	features.ColorHarmony = 0

@@ -116,8 +116,12 @@ func (f VisualFeatures) Validate() error {
 
 func (f VisualFeatures) LowConfidenceReason() string {
 	switch {
-	case f.OutfitVisibility == 0 && f.Confidence == 0 && f.OutfitCoherence == 0 && f.ColorHarmony == 0 && f.Originality == 0:
+	case f.PersonCount != 1:
+		return "single_person_required"
+	case f.OutfitVisibility == 0:
 		return "outfit_visibility_too_low"
+	case f.Confidence < 20:
+		return "ai_confidence_too_low"
 	default:
 		return ""
 	}

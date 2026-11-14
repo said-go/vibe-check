@@ -27,9 +27,15 @@ func main() {
 	if cfg.AIProvider == "yandex" && cfg.YandexAPIKey != "" && cfg.YandexFolderID != "" {
 		provider = vision.NewYandex(cfg.YandexAPIKey, cfg.YandexFolderID, cfg.YandexModel, cfg.YandexBaseURL, &http.Client{Timeout: cfg.YandexTimeout})
 	}
-	api := httpapi.NewWithLimits(logger, cfg.MaxRequestBytes, provider, httpapi.Limits{
+	presets, err := httpapi.LoadPhotoPresets(cfg.PhotoPresetsFile)
+	if err != nil {
+		logger.Error("invalid_preset_configuration", "error", err)
+		os.Exit(1)
+	}
+	logger.Info("provider_budget_configured", "scope", "process", "calls_per_hour", cfg.AnalysesPerHour, "calls_per_client_minute", cfg.AnalysesPerClientMinute, "presets_loaded", len(presets))
+	api := httpapi.NewWithPresets(logger, cfg.MaxRequestBytes, provider, httpapi.Limits{
 		PerHour: int(cfg.AnalysesPerHour), PerClientMinute: int(cfg.AnalysesPerClientMinute), Concurrent: int(cfg.MaxConcurrentAnalyses),
-	})
+	}, presets)
 	mux := http.NewServeMux()
 	mux.Handle("/api/", http.StripPrefix("/api", api))
 	mux.Handle("/", http.FileServer(http.Dir(cfg.FrontendDir)))

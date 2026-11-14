@@ -1,0 +1,11 @@
+.git
+.openai
+**/.env
+**/.env.*
+!**/.env.example
+backend/private
+node_modules
+**/node_modules
+docs
+*.zip
+**/*.log

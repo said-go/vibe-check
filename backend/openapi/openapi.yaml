@@ -20,12 +20,12 @@ paths:
       operationId: ready
       responses:
         '200':
-          description: AI provider is configured and process is ready to accept requests.
+          description: AI or private photo presets are configured. Flags describe available paths; this does not validate provider credentials.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Status' }
+              schema: { $ref: '#/components/schemas/Readiness' }
         '503':
-          description: AI provider is not configured.
+          description: Neither AI nor private photo presets are configured.
   /v1/analyses:
     post:
       operationId: analyzeImage
@@ -80,6 +80,13 @@ components:
       type: object
       required: [status]
       properties: { status: { type: string } }
+    Readiness:
+      type: object
+      required: [status, ai_available, presets_available]
+      properties:
+        status: { type: string }
+        ai_available: { type: boolean }
+        presets_available: { type: boolean }
     Score:
       type: integer
       minimum: 0

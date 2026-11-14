@@ -7,6 +7,15 @@ import (
 	"github.com/said-go/vibe-check/backend/internal/vision"
 )
 
+func TestIdempotencyIncludesOriginalImageDigest(t *testing.T) {
+	cache := newIdempotencyCache()
+	const key = "same-request-key-123456789"
+	cache.begin(key, []byte("jpeg"), "first-digest")
+	if _, state := cache.begin(key, []byte("jpeg"), "second-digest"); state != idempotencyConflict {
+		t.Fatal("changed original digest reused cached result")
+	}
+}
+
 func TestIdempotencyCacheDeduplicatesInFlightAndRejectsKeyReuse(t *testing.T) {
 	cache := newIdempotencyCache()
 	const key = "idempotency-key-1234567890"

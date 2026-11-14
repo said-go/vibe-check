@@ -55,6 +55,63 @@ func TestGothIsAStyleNotALowLevel(t *testing.T) {
 	}
 }
 
+func TestSmileDoesNotEraseStrongClothingStyle(t *testing.T) {
+	for _, style := range []string{"goth", "alternative", "retro_90s", "sport_chic", "streetwear", "urban_classic"} {
+		t.Run(style, func(t *testing.T) {
+			f := baseFeatures()
+			f.Signals = analysis.SubcultureSignals{}
+			f.Formality = 0
+			f.Sportiness = 0
+			f.Darkness = 0
+			switch style {
+			case "goth":
+				f.Signals.Goth = 100
+				f.Darkness = 100
+			case "alternative":
+				f.Signals.Alternative = 100
+				f.Originality = 100
+				f.AccessoryIntensity = 100
+			case "retro_90s":
+				f.Signals.Retro90s = 100
+			case "sport_chic":
+				f.Signals.SportChic = 100
+				f.Sportiness = 100
+			case "streetwear":
+				f.Signals.Streetwear = 100
+				f.Originality = 100
+			case "urban_classic":
+				f.Signals.Classic = 100
+				f.Formality = 100
+			}
+			f.GentleSmile = true
+			r, err := NewEngine().Evaluate(f)
+			if err != nil || r.PrimaryCategory.Code != style {
+				t.Fatalf("smile erased %s: %+v %v", style, r, err)
+			}
+		})
+	}
+}
+
+func TestUnreliableFeaturesDoNotExposeNormalVerdict(t *testing.T) {
+	for _, kind := range []string{"no person", "multiple people", "no clothing", "very low confidence"} {
+		f := baseFeatures()
+		switch kind {
+		case "no person":
+			f.PersonCount = 0
+		case "multiple people":
+			f.PersonCount = 3
+		case "no clothing":
+			f.OutfitVisibility = 0
+		case "very low confidence":
+			f.Confidence = 1
+		}
+		r, err := NewEngine().Evaluate(f)
+		if err != nil || r.Status != "low_confidence" || r.PrimaryCategory.Code != "" || r.Score != 0 || r.LevelTitle != "" || r.Metrics != (Metrics{}) {
+			t.Fatalf("%s: %+v %v", kind, r, err)
+		}
+	}
+}
+
 func TestLowConfidenceDoesNotReturnCategory(t *testing.T) {
 	features := baseFeatures()
 	features.OutfitVisibility = 0
