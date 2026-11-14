@@ -89,7 +89,16 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	knownRetry := len(idempotencyValues) == 1 && s.idempotency.contains(idempotencyValues[0])
-	reservation, retryAfter := s.limiter.acquire(r, knownRetry)
+	// A candidate preset still needs consent, sanitation and visual verification.
+	// Defer its paid-budget decision while retaining the concurrency limit.
+	presetCandidate := false
+	for _, preset := range s.presets {
+		if preset.originalSHA256 == r.Header.Get("X-Original-Image-SHA256") {
+			presetCandidate = true
+			break
+		}
+	}
+	reservation, retryAfter := s.limiter.acquire(r, knownRetry || presetCandidate)
 	if reservation == nil {
 		w.Header().Set("Retry-After", retryAfterHeader(retryAfter))
 		s.writeError(w, r, http.StatusTooManyRequests, "analysis_rate_limited", "Too many analysis requests", true)
@@ -213,6 +222,9 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 	}
 	if !s.configured {
 		complete(analysisOutcome{visionErr: vision.ErrUnavailable})
+		return
+	}
+	if r.Context().Err() != nil {
 		return
 	}
 	if retryAfter := reservation.commit(); retryAfter > 0 {

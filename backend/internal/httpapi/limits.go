@@ -116,10 +116,10 @@ func (a *admission) commit() int {
 		}
 	}
 	a.committed = true
-	if l.hourCount >= l.limits.PerHour {
+	if l.hourCount+l.hourPending >= l.limits.PerHour {
 		return secondsUntil(l.hourStart.Add(time.Hour), now)
 	}
-	if l.clients[a.key] >= l.limits.PerClientMinute {
+	if l.clients[a.key]+l.clientPending[a.key] >= l.limits.PerClientMinute {
 		return secondsUntil(l.minuteStart.Add(time.Minute), now)
 	}
 	l.hourCount++

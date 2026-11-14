@@ -132,3 +132,18 @@ func TestInvalidReservationDoesNotSpendBudget(t *testing.T) {
 	}
 	second.release()
 }
+
+func TestDeferredBudgetCannotStealReservation(t *testing.T) {
+	l := newRequestLimiter(Limits{PerHour: 1, PerClientMinute: 1, Concurrent: 2})
+	r := httptest.NewRequest(http.MethodPost, "/", nil)
+	reserved, _ := l.acquire(r)
+	defer reserved.release()
+	deferred, _ := l.acquire(r, true)
+	defer deferred.release()
+	if deferred.commit() == 0 {
+		t.Fatal("deferred request stole reserved capacity")
+	}
+	if reserved.commit() != 0 {
+		t.Fatal("reserved call denied")
+	}
+}

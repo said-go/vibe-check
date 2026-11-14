@@ -336,3 +336,20 @@ func TestAnalyzeRateLimitRunsBeforeImageDecode(t *testing.T) {
 		t.Fatalf("rate limit must precede image decoding and AI call: status=%d body=%s calls=%d", second.Code, second.Body.String(), calls)
 	}
 }
+
+func TestCancelledRequestDoesNotSpendPaidBudget(t *testing.T) {
+	calls := 0
+	handler := NewWithLimits(slog.New(slog.NewTextHandler(io.Discard, nil)), 10<<20, fakeVision{err: vision.ErrUnavailable, calls: &calls}, Limits{PerHour: 1, PerClientMinute: 1, Concurrent: 1})
+	request := makeImageRequest(t, []string{"true"}, [][]byte{patternedImage(t, false)}, "image/jpeg")
+	ctx, cancel := context.WithCancel(request.Context())
+	cancel()
+	handler.ServeHTTP(httptest.NewRecorder(), request.WithContext(ctx))
+	if calls != 0 {
+		t.Fatal("cancelled request reached provider")
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, makeImageRequest(t, []string{"true"}, [][]byte{patternedImage(t, false)}, "image/jpeg"))
+	if response.Code != 503 || calls != 1 {
+		t.Fatalf("cancelled request consumed budget: status=%d calls=%d", response.Code, calls)
+	}
+}

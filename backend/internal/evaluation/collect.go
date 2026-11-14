@@ -3,6 +3,7 @@ package evaluation
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -48,9 +49,28 @@ func DecodeImages(r io.Reader) (ImageManifest, error) {
 // Collect bypasses all photo presets and never includes file paths in its dataset.
 // The provider guard bounds actual HTTP attempts, including retries.
 func Collect(ctx context.Context, m ImageManifest, base string, p vision.Provider, maxCalls int) (Dataset, error) {
+	return CollectCheckpoint(ctx, m, base, p, maxCalls, nil)
+}
+
+// CollectCheckpoint saves each successful case before starting another AI call.
+func CollectCheckpoint(ctx context.Context, m ImageManifest, base string, p vision.Provider, maxCalls int, checkpoint func(Case) error) (Dataset, error) {
 	out := Dataset{Kind: "reviewed_features", Cases: []Case{}}
 	if maxCalls < 1 || maxCalls > 100 || len(m.Cases) == 0 || len(m.Cases) > maxCalls {
 		return out, errors.New("call budget must cover cases and be within 1..100")
+	}
+	fingerprints := make([][32]byte, len(m.Cases))
+	for i, c := range m.Cases {
+		if ctx.Err() != nil {
+			return out, errors.New("collection cancelled or timed out")
+		}
+		raw, err := readImage(base, c.Path, i)
+		if err != nil {
+			return out, err
+		}
+		if _, err = imageproc.New().Sanitize(bytes.NewReader(raw), ""); err != nil {
+			return out, fmt.Errorf("case %d: invalid JPEG/PNG or dimensions", i+1)
+		}
+		fingerprints[i] = sha256.Sum256(raw)
 	}
 	calls := 0
 	ctx = vision.WithAttemptGuard(ctx, func() error {
@@ -64,18 +84,12 @@ func Collect(ctx context.Context, m ImageManifest, base string, p vision.Provide
 		if ctx.Err() != nil {
 			return Dataset{}, errors.New("collection cancelled or timed out")
 		}
-		path := c.Path
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(base, path)
-		}
-		f, e := os.Open(path)
+		raw, e := readImage(base, c.Path, i)
 		if e != nil {
-			return Dataset{}, fmt.Errorf("case %d: cannot read image", i+1)
+			return out, e
 		}
-		raw, e := io.ReadAll(io.LimitReader(f, (10<<20)+1))
-		f.Close()
-		if e != nil || len(raw) > 10<<20 {
-			return Dataset{}, fmt.Errorf("case %d: image exceeds 10 MiB or cannot be read", i+1)
+		if sha256.Sum256(raw) != fingerprints[i] {
+			return out, fmt.Errorf("case %d: image changed after validation", i+1)
 		}
 		clean, e := imageproc.New().Sanitize(bytes.NewReader(raw), "")
 		if e != nil {
@@ -93,6 +107,27 @@ func Collect(ctx context.Context, m ImageManifest, base string, p vision.Provide
 			return Dataset{}, errors.New("cannot encode features")
 		}
 		out.Cases = append(out.Cases, Case{ID: fmt.Sprintf("case-%04d", i+1), Features: encoded, Expected: c.Expected})
+		if checkpoint != nil {
+			if err := checkpoint(out.Cases[len(out.Cases)-1]); err != nil {
+				return out, fmt.Errorf("case %d: checkpoint failed; stopping before further paid calls", i+1)
+			}
+		}
 	}
 	return out, nil
+}
+
+func readImage(base, path string, i int) ([]byte, error) {
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(base, path)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("case %d: cannot read image", i+1)
+	}
+	defer f.Close()
+	raw, err := io.ReadAll(io.LimitReader(f, (10<<20)+1))
+	if err != nil || len(raw) > 10<<20 {
+		return nil, fmt.Errorf("case %d: image exceeds 10 MiB or cannot be read", i+1)
+	}
+	return raw, nil
 }

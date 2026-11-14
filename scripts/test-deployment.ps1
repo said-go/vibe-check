@@ -28,9 +28,17 @@ function Invoke-WebRequest {
     $content = '{}'; $type = 'application/json'
     switch ($path) {
         '/api/readyz' { $content = @{status='ready';ai_available=$global:deployTestAI} | ConvertTo-Json }
-        '/' { $type='text/html'; $content='<script src="assets/app.aaaaaaaaaaaaaaaa.js"></script><script src="assets/history.aaaaaaaaaaaaaaaa.js"></script><script src="assets/share-card.aaaaaaaaaaaaaaaa.js"></script><link href="assets/styles.aaaaaaaaaaaaaaaa.css">' }
-        '/manifest.webmanifest' { $content='{"name":"test","icons":[{}]}' }
-        default { if ($path -like '/assets/*') { $type=if($path.EndsWith('.css')){'text/css'}else{'application/javascript'}; if($global:deployTestBrokenAsset){$type='text/html'} } }
+        '/' { $type='text/html'; $content=[IO.File]::ReadAllText((Join-Path $root 'dist/index.html')) }
+        '/manifest.webmanifest' { $content=[IO.File]::ReadAllText((Join-Path $root 'dist/manifest.webmanifest')); if($global:deployTestUnsafeIcon){$content=$content.Replace('icons/icon-192.png','https://example.invalid/evil.png')} }
+        '/sw.js' { $type='application/javascript'; $content=[IO.File]::ReadAllText((Join-Path $root 'dist/sw.js')); if($global:deployTestBrokenSW){$content=$content.Replace('/index.html','/stale.html')} }
+        default {
+            if ($path -like '/assets/*') {
+                $type=if($path.EndsWith('.css')){'text/css'}else{'application/javascript'}
+                $content=[IO.File]::ReadAllText((Join-Path $root ('dist'+$path))).Replace("`r`n","`n").Replace("`n","`r`n")
+                if($global:deployTestBrokenAsset){$type='text/html'}
+                if($global:deployTestCorruptHash){$content+='corrupt'}
+            } elseif($path -like '/icons/*') { $type=if($global:deployTestBrokenIcon){'text/html'}else{'image/png'} }
+        }
     }
     @{StatusCode=200;Headers=@{'Content-Type'=$type};Content=$content}
 }
@@ -42,6 +50,16 @@ $global:deployTestAI=$false
 Assert-Throws { & "$PSScriptRoot/smoke-yandex.ps1" -BaseUrl 'https://example.invalid/' } 'AI is not configured'
 $global:deployTestAI=$true; $global:deployTestBrokenAsset=$true
 Assert-Throws { & "$PSScriptRoot/smoke-yandex.ps1" -BaseUrl 'https://example.invalid/' } 'incorrect Content-Type'
+$global:deployTestBrokenAsset=$false
+$global:deployTestCorruptHash=$true
+Assert-Throws { & "$PSScriptRoot/smoke-yandex.ps1" -BaseUrl 'https://example.invalid/' } 'hash mismatch'
+$global:deployTestCorruptHash=$false; $global:deployTestBrokenSW=$true
+Assert-Throws { & "$PSScriptRoot/smoke-yandex.ps1" -BaseUrl 'https://example.invalid/' } 'release mismatch'
+$global:deployTestBrokenSW=$false; $global:deployTestUnsafeIcon=$true
+Assert-Throws { & "$PSScriptRoot/smoke-yandex.ps1" -BaseUrl 'https://example.invalid/' } 'Unsafe manifest icon'
+$global:deployTestUnsafeIcon=$false; $global:deployTestBrokenIcon=$true
+Assert-Throws { & "$PSScriptRoot/smoke-yandex.ps1" -BaseUrl 'https://example.invalid/' } 'icon is unavailable'
+$global:deployTestBrokenIcon=$false
 . "$PSScriptRoot/run-command.ps1"
 $shell = (Get-Process -Id $PID).Path
 $output = Invoke-BoundedCommand $shell @('-NoProfile','-Command','Write-Output ''bounded ok''') 10

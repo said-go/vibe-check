@@ -143,3 +143,35 @@ func TestLoadPhotoPresetsValidation(t *testing.T) {
 		t.Fatal("missing file accepted")
 	}
 }
+
+func TestPresetWorksAfterPaidBudgetExhausted(t *testing.T) {
+	photo := patternedImage(t, false)
+	clean, err := imageproc.New().Sanitize(bytes.NewReader(photo), "image/jpeg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash, err := visualHash(clean.JPEG)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := strings.Repeat("a", 64)
+	presets := PhotoPresets{{originalSHA256: digest, visualHash: hash, result: scoring.Result{Status: "completed", PrimaryCategory: scoring.CategoryScore{Code: "preset", Title: "Synthetic"}}}}
+	calls := 0
+	handler := NewWithPresets(slog.New(slog.NewTextHandler(io.Discard, nil)), 10<<20, fakeVision{err: vision.ErrUnavailable, calls: &calls}, Limits{PerHour: 1, PerClientMinute: 1, Concurrent: 1}, presets)
+	run := func(image []byte, claim string) int {
+		r := makeImageRequest(t, []string{"true"}, [][]byte{image}, "image/jpeg")
+		r.Header.Set("X-Original-Image-SHA256", claim)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		return w.Code
+	}
+	if got := run(photo, ""); got != 503 || calls != 1 {
+		t.Fatalf("initial status=%d calls=%d", got, calls)
+	}
+	if got := run(photo, digest); got != 200 || calls != 1 {
+		t.Fatalf("preset status=%d calls=%d", got, calls)
+	}
+	if got := run(patternedImage(t, true), digest); got != 429 || calls != 1 {
+		t.Fatalf("spoof status=%d calls=%d", got, calls)
+	}
+}

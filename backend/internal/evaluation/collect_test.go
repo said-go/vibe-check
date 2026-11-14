@@ -112,3 +112,42 @@ func TestDecodeImagesRejectsUnsafeExpectations(t *testing.T) {
 		}
 	}
 }
+
+func TestCollectPreflightsLaterImagesBeforePaidCalls(t *testing.T) {
+	dir := t.TempDir()
+	var b bytes.Buffer
+	png.Encode(&b, image.NewRGBA(image.Rect(0, 0, 128, 128)))
+	os.WriteFile(filepath.Join(dir, "valid.png"), b.Bytes(), 0600)
+	p := &collectProvider{}
+	m := ImageManifest{Cases: []ImageCase{{Path: "valid.png"}, {Path: "private-missing.png"}}}
+	_, err := Collect(context.Background(), m, dir, p, 2)
+	if err == nil || p.calls != 0 || strings.Contains(err.Error(), "private-missing") {
+		t.Fatalf("preflight failed: calls=%d err=%v", p.calls, err)
+	}
+}
+
+func TestCollectStopsAfterCheckpointFailure(t *testing.T) {
+	dir := t.TempDir()
+	var b bytes.Buffer
+	png.Encode(&b, image.NewRGBA(image.Rect(0, 0, 128, 128)))
+	os.WriteFile(filepath.Join(dir, "valid.png"), b.Bytes(), 0600)
+	fixture, err := os.Open("testdata/synthetic.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fixture.Close()
+	d, err := Decode(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := analysis.DecodeFeatures(bytes.NewReader(d.Cases[0].Features))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &collectProvider{features: f}
+	m := ImageManifest{Cases: []ImageCase{{Path: "valid.png"}, {Path: "valid.png"}}}
+	_, err = CollectCheckpoint(context.Background(), m, dir, p, 2, func(Case) error { return errors.New("private output path") })
+	if err == nil || p.calls != 1 || strings.Contains(err.Error(), "private output") {
+		t.Fatalf("checkpoint failure: calls=%d err=%v", p.calls, err)
+	}
+}
