@@ -12,6 +12,7 @@ import (
 const MaxLineBytes = 1 << 20
 
 type Group struct {
+	Model        string `json:"model,omitempty"`
 	Provider     string `json:"provider"`
 	Outcome      string `json:"outcome"`
 	Attempts     int64  `json:"attempts"`
@@ -21,22 +22,23 @@ type Group struct {
 	TotalTokens  int64  `json:"total_tokens"`
 }
 type Report struct {
-	Attempts        int64   `json:"attempts"`
-	UnknownUsage    int64   `json:"unknown_usage"`
-	InputTokens     int64   `json:"input_tokens"`
-	OutputTokens    int64   `json:"output_tokens"`
-	TotalTokens     int64   `json:"total_tokens"`
-	SkippedLines    int64   `json:"skipped_lines"`
-	InvalidLines    int64   `json:"invalid_lines"`
-	InputIncomplete bool    `json:"input_incomplete"`
-	Groups          []Group `json:"groups"`
+	Estimate        *Estimate `json:"estimate,omitempty"`
+	Attempts        int64     `json:"attempts"`
+	UnknownUsage    int64     `json:"unknown_usage"`
+	InputTokens     int64     `json:"input_tokens"`
+	OutputTokens    int64     `json:"output_tokens"`
+	TotalTokens     int64     `json:"total_tokens"`
+	SkippedLines    int64     `json:"skipped_lines"`
+	InvalidLines    int64     `json:"invalid_lines"`
+	InputIncomplete bool      `json:"input_incomplete"`
+	Groups          []Group   `json:"groups"`
 }
 
 // Read accepts JSON-lines emitted by the server. Invalid lines are counted,
 // never echoed. A scanner failure stops processing and marks the report partial.
 func Read(r io.Reader) Report {
 	report := Report{Groups: []Group{}}
-	groups := map[[2]string]*Group{}
+	groups := map[[3]string]*Group{}
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 4096), MaxLineBytes)
 	for scanner.Scan() {
@@ -52,6 +54,7 @@ func Read(r io.Reader) Report {
 			continue
 		}
 		var row struct {
+			Model     string `json:"model"`
 			Provider  string `json:"provider"`
 			Outcome   string `json:"outcome"`
 			Available *bool  `json:"usage_available"`
@@ -59,7 +62,7 @@ func Read(r io.Reader) Report {
 			Output    *int64 `json:"output_tokens"`
 			Total     *int64 `json:"total_tokens"`
 		}
-		if json.Unmarshal(scanner.Bytes(), &row) != nil || (row.Provider != "yandex" && row.Provider != "openai") || !validOutcome(row.Outcome) {
+		if json.Unmarshal(scanner.Bytes(), &row) != nil || (row.Model != "" && !identifier.MatchString(row.Model)) || (row.Provider != "yandex" && row.Provider != "openai") || !validOutcome(row.Outcome) {
 			report.InvalidLines++
 			continue
 		}
@@ -72,10 +75,10 @@ func Read(r io.Reader) Report {
 			report.InvalidLines++
 			continue
 		}
-		key := [2]string{row.Provider, row.Outcome}
+		key := [3]string{row.Provider, row.Outcome, row.Model}
 		g := groups[key]
 		if g == nil {
-			g = &Group{Provider: row.Provider, Outcome: row.Outcome}
+			g = &Group{Provider: row.Provider, Outcome: row.Outcome, Model: row.Model}
 			groups[key] = g
 		}
 		report.Attempts++
@@ -102,6 +105,9 @@ func Read(r io.Reader) Report {
 		a, b := report.Groups[i], report.Groups[j]
 		if a.Provider != b.Provider {
 			return a.Provider < b.Provider
+		}
+		if a.Model != b.Model {
+			return a.Model < b.Model
 		}
 		return a.Outcome < b.Outcome
 	})

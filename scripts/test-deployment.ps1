@@ -23,6 +23,11 @@ Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -RedisSecretVersionId v
 Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -SharedAnalysesPerHour 7 } 'require Redis secret'
 Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -RedisSecretId redis123 -RedisSecretVersionId version456 -RedisBudgetKey 'bad,key=value' } 'Invalid Redis budget'
 Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -RedisSecretId redis123 -RedisSecretVersionId version456 -SharedAnalysesPerHour 0 } 'Invalid Redis budget'
+foreach ($invalidImage in @('', 'latest', ('a'*40), 'cr.yandex/other/vibe-check:latest', ('sha256:' + ('A'*64)), ('sha256:' + ('a'*64) + ';bad'))) {
+    Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -ImageDigest $invalidImage } 'immutable sha256'
+}
+& "$PSScriptRoot/deploy-yandex.ps1" @ids -ImageDigest ('sha256:' + ('b'*64))
+$global:deployTestCount++
 # Execute the actual deploy script against a temporary fake command runner.
 # Never add a mock switch to the production deployment entry point.
 $fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) ('vibe-deploy-test-' + [guid]::NewGuid().ToString('N'))
@@ -33,6 +38,7 @@ $fakeRunner = @'
 function Invoke-BoundedCommand {
     param($Executable, [string[]]$Arguments, $TimeoutSeconds, $WorkingDirectory)
     $global:deployTestCommands.Add(@{ Tool=$Executable; Arguments=$Arguments })
+    if ($global:deployTestFailGet -and $Arguments -contains 'get') { throw 'Target lookup failed' }
 }
 '@
 [IO.File]::WriteAllText((Join-Path $fixtureScripts 'run-command.ps1'), $fakeRunner)
@@ -57,6 +63,19 @@ try {
         if($environmentArg -match 'REDIS_BUDGET_URL' -or ($argv -join ' ') -match 'redis[s]?://|allow-unauthenticated'){throw 'Unexpected plaintext URL or public access mutation'}
         $global:deployTestCount++
     }
+    $global:deployTestCommands = New-Object 'System.Collections.Generic.List[object]'
+    $digest='sha256:' + ('b'*64)
+    & (Join-Path $fixtureScripts 'deploy-yandex.ps1') @ids -ImageDigest $digest -RedisSecretId redis123 -RedisSecretVersionId version456 -Apply
+    if ($global:deployTestCommands.Count -ne 2 -or @($global:deployTestCommands | Where-Object { $_.Tool -ne 'yc' }).Count -ne 0) { throw 'Rollback must only get target and deploy revision' }
+    $argv=$global:deployTestCommands[1].Arguments
+    if ($argv[[array]::IndexOf($argv,'--image')+1] -cne "cr.yandex/registry123/vibe-check@$digest") { throw 'Rollback digest changed' }
+    if (@($argv | Where-Object { $_ -eq '--secret' }).Count -ne 2) { throw 'Rollback dropped configured secrets' }
+    $global:deployTestCount++
+    $global:deployTestCommands = New-Object 'System.Collections.Generic.List[object]'
+    $global:deployTestFailGet=$true
+    Assert-Throws { & (Join-Path $fixtureScripts 'deploy-yandex.ps1') @ids -ImageDigest $digest -Apply } 'Target lookup failed'
+    if ($global:deployTestCommands.Count -ne 1) { throw 'Rollback continued after lookup failure' }
+    $global:deployTestFailGet=$false
 } finally {
     Remove-Item -LiteralPath (Join-Path $fixtureScripts 'deploy-yandex.ps1'),(Join-Path $fixtureScripts 'run-command.ps1')
     [IO.Directory]::Delete($fixtureScripts)
