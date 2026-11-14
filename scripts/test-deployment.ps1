@@ -18,6 +18,50 @@ Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -Apply } 'Working tree 
 $bad = $ids.Clone(); $bad.FolderId='invalid;command'
 Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @bad } 'resource ID'
 if ($global:deployTestMutations -ne 0) { throw 'Plan/validation unexpectedly invoked cloud tools.' }
+Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -RedisSecretId redis123 } 'supplied together'
+Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -RedisSecretVersionId version456 } 'supplied together'
+Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -SharedAnalysesPerHour 7 } 'require Redis secret'
+Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -RedisSecretId redis123 -RedisSecretVersionId version456 -RedisBudgetKey 'bad,key=value' } 'Invalid Redis budget'
+Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -RedisSecretId redis123 -RedisSecretVersionId version456 -SharedAnalysesPerHour 0 } 'Invalid Redis budget'
+# Execute the actual deploy script against a temporary fake command runner.
+# Never add a mock switch to the production deployment entry point.
+$fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) ('vibe-deploy-test-' + [guid]::NewGuid().ToString('N'))
+$fixtureScripts = Join-Path $fixtureRoot 'scripts'
+[IO.Directory]::CreateDirectory($fixtureScripts) | Out-Null
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'deploy-yandex.ps1') -Destination $fixtureScripts
+$fakeRunner = @'
+function Invoke-BoundedCommand {
+    param($Executable, [string[]]$Arguments, $TimeoutSeconds, $WorkingDirectory)
+    $global:deployTestCommands.Add(@{ Tool=$Executable; Arguments=$Arguments })
+}
+'@
+[IO.File]::WriteAllText((Join-Path $fixtureScripts 'run-command.ps1'), $fakeRunner)
+try {
+    function git { $global:LASTEXITCODE=0; if ($args -contains 'rev-parse') { 'a' * 40 } }
+    foreach ($withRedis in @($false, $true)) {
+        $global:deployTestCommands = New-Object 'System.Collections.Generic.List[object]'
+        $options=$ids.Clone()
+        if($withRedis) { $options.RedisSecretId='redis123'; $options.RedisSecretVersionId='version456'; $options.RedisBudgetKey='test:budget'; $options.SharedAnalysesPerHour=7 }
+        & (Join-Path $fixtureScripts 'deploy-yandex.ps1') @options -Apply
+        if($global:deployTestCommands.Count -ne 5){throw 'Unexpected deploy command count'}
+        $revision=$global:deployTestCommands[4]
+        $argv=$revision.Arguments
+        if($revision.Tool -ne 'yc' -or ($argv[0..3] -join ' ') -ne 'serverless container revision deploy'){throw 'Wrong deploy command'}
+        $secretFlags=@($argv | Where-Object { $_ -eq '--secret' }).Count
+        if($secretFlags -ne (1+[int]$withRedis)){throw 'Wrong secret bindings count'}
+        $environmentArg=$argv[[array]::IndexOf($argv,'--environment')+1]
+        if($withRedis) {
+            if($argv -notcontains 'environment-variable=REDIS_BUDGET_URL,id=redis123,version-id=version456,key=REDIS_BUDGET_URL'){throw 'Redis secret binding missing'}
+            if($environmentArg -notlike '*REDIS_BUDGET_KEY=test:budget,SHARED_ANALYSES_PER_HOUR=7'){throw 'Redis budget settings missing'}
+        } elseif(($argv -join ' ') -match 'REDIS_|SHARED_ANALYSES'){throw 'Default deploy unexpectedly enables Redis'}
+        if($environmentArg -match 'REDIS_BUDGET_URL' -or ($argv -join ' ') -match 'redis[s]?://|allow-unauthenticated'){throw 'Unexpected plaintext URL or public access mutation'}
+        $global:deployTestCount++
+    }
+} finally {
+    Remove-Item -LiteralPath (Join-Path $fixtureScripts 'deploy-yandex.ps1'),(Join-Path $fixtureScripts 'run-command.ps1')
+    [IO.Directory]::Delete($fixtureScripts)
+    [IO.Directory]::Delete($fixtureRoot)
+}
 $global:deployTestRequests = 0
 $global:deployTestAI = $true
 $global:deployTestBrokenAsset = $false

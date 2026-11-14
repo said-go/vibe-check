@@ -10,6 +10,66 @@ import (
 	"testing"
 )
 
+func TestExpectedCoverageCLI(t *testing.T) {
+	raw, err := os.ReadFile("../../internal/evaluation/testdata/synthetic.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var d evaluation.Dataset
+	if err = json.Unmarshal(raw, &d); err != nil {
+		t.Fatal(err)
+	}
+	d.Cases = d.Cases[:2]
+	raw, err = json.Marshal(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err = os.WriteFile(filepath.Join(dir, "partial.json"), raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		count   string
+		code    int
+		status  string
+		missing int
+	}{
+		{"3", 1, "incomplete", 1}, {"2", 0, "complete", 0}, {"1", 2, "", 0}, {"0", 2, "", 0}, {"-1", 2, "", 0}, {"10001", 2, "", 0},
+	} {
+		t.Run(tc.count, func(t *testing.T) {
+			var out, diagnostic bytes.Buffer
+			code := run([]string{"-input-dir", dir, "-json", "-expected-count", tc.count}, &out, &diagnostic)
+			if code != tc.code {
+				t.Fatalf("code %d: %s", code, diagnostic.String())
+			}
+			if code == 2 {
+				if out.Len() != 0 {
+					t.Fatal("invalid count emitted report")
+				}
+				return
+			}
+			var r evaluation.Report
+			if err := json.Unmarshal(out.Bytes(), &r); err != nil {
+				t.Fatal(err)
+			}
+			if r.Passed != 2 || r.Failed != 0 || r.CoverageStatus != tc.status || r.MissingCount == nil || *r.MissingCount != tc.missing {
+				t.Fatalf("report %+v", r)
+			}
+		})
+	}
+	var out, diagnostic bytes.Buffer
+	if code := run([]string{"-input-dir", dir, "-json"}, &out, &diagnostic); code != 0 {
+		t.Fatal(diagnostic.String())
+	}
+	var r evaluation.Report
+	if err := json.Unmarshal(out.Bytes(), &r); err != nil {
+		t.Fatal(err)
+	}
+	if r.CoverageStatus != "unknown" || r.ExpectedCount != nil || r.MissingCount != nil {
+		t.Fatalf("omitted count claims coverage: %+v", r)
+	}
+}
+
 func TestDirectoryCLI(t *testing.T) {
 	raw, err := os.ReadFile("../../internal/evaluation/testdata/synthetic.json")
 	if err != nil {

@@ -5,12 +5,24 @@ param(
     [Parameter(Mandatory)][string]$ServiceAccountId,
     [Parameter(Mandatory)][string]$SecretId,
     [Parameter(Mandatory)][string]$SecretVersionId,
+    [string]$RedisSecretId,
+    [string]$RedisSecretVersionId,
+    [string]$RedisBudgetKey = 'vibe-check:provider-budget',
+    [int]$SharedAnalysesPerHour = 30,
     [switch]$Apply
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'run-command.ps1')
 $projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+
+$redisEnabled = -not [string]::IsNullOrEmpty($RedisSecretId)
+if ($redisEnabled -ne (-not [string]::IsNullOrEmpty($RedisSecretVersionId))) { throw 'RedisSecretId and RedisSecretVersionId must be supplied together.' }
+if (-not $redisEnabled -and ($PSBoundParameters.ContainsKey('RedisBudgetKey') -or $PSBoundParameters.ContainsKey('SharedAnalysesPerHour'))) { throw 'Redis budget options require Redis secret IDs.' }
+if ($redisEnabled) {
+    if ($RedisSecretId -notmatch '^[a-zA-Z0-9_-]{6,80}$' -or $RedisSecretVersionId -notmatch '^[a-zA-Z0-9_-]{6,80}$') { throw 'Redis secret IDs must be Yandex Cloud resource IDs.' }
+    if ($RedisBudgetKey -notmatch '^[a-zA-Z0-9:_-]{1,128}$' -or $SharedAnalysesPerHour -lt 1 -or $SharedAnalysesPerHour -gt 1000000) { throw 'Invalid Redis budget key or limit.' }
+}
 
 foreach ($item in @(
     @{ Name = 'FolderId'; Value = $FolderId },
@@ -31,12 +43,14 @@ if ($LASTEXITCODE -ne 0 -or $commit -notmatch '^[0-9a-f]{40}$') { throw 'Cannot 
 $image = "cr.yandex/$RegistryId/vibe-check:$commit"
 $environment = "APP_ENV=production,AI_PROVIDER=yandex,YANDEX_FOLDER_ID=$FolderId,YANDEX_MODEL=qwen3.6-35b-a3b,FRONTEND_DIR=/app/dist,ANALYSES_PER_HOUR=30,ANALYSES_PER_CLIENT_MINUTE=3,MAX_CONCURRENT_ANALYSES=2"
 $secret = "environment-variable=YANDEX_API_KEY,id=$SecretId,version-id=$SecretVersionId,key=YANDEX_API_KEY"
+if ($redisEnabled) { $environment += ",REDIS_BUDGET_KEY=$RedisBudgetKey,SHARED_ANALYSES_PER_HOUR=$SharedAnalysesPerHour" }
 
 Write-Host "Commit: $commit"
 Write-Host "Image: $image"
 Write-Host "Target container: $ContainerId in folder $FolderId"
 Write-Host 'Revision: 1 core, 1GB RAM, 180s timeout, 2 concurrent requests, 1 instance per zone.'
 Write-Host 'Secret value is read by the container from Lockbox; this script only receives resource IDs.'
+if ($redisEnabled) { Write-Host "Shared Redis budget: $SharedAnalysesPerHour attempts per hour; URL supplied by Lockbox." }
 
 if (-not $Apply) {
     Write-Host 'Plan only. Pass -Apply after cloud access, Docker authentication, and billing limits are configured.'
@@ -54,5 +68,7 @@ Invoke-BoundedCommand docker @('info', '--format', '{{.Server.Version}}') 15 | O
 Invoke-BoundedCommand yc @('serverless', 'container', 'get', '--id', $ContainerId, '--folder-id', $FolderId, '--format', 'json') 60 | Out-Null
 Invoke-BoundedCommand docker @('build', '--platform', 'linux/amd64', '-t', $image, '.') 900 $projectRoot | Out-Null
 Invoke-BoundedCommand docker @('push', $image) 600 | Out-Null
-Invoke-BoundedCommand yc @('serverless', 'container', 'revision', 'deploy', '--container-id', $ContainerId, '--folder-id', $FolderId, '--image', $image, '--cores', '1', '--memory', '1GB', '--execution-timeout', '180s', '--concurrency', '2', '--zone-instances-limit', '1', '--service-account-id', $ServiceAccountId, '--environment', $environment, '--secret', $secret) 300 | Out-Null
+$revisionArguments = @('serverless', 'container', 'revision', 'deploy', '--container-id', $ContainerId, '--folder-id', $FolderId, '--image', $image, '--cores', '1', '--memory', '1GB', '--execution-timeout', '180s', '--concurrency', '2', '--zone-instances-limit', '1', '--service-account-id', $ServiceAccountId, '--environment', $environment, '--secret', $secret)
+if ($redisEnabled) { $revisionArguments += @('--secret', "environment-variable=REDIS_BUDGET_URL,id=$RedisSecretId,version-id=$RedisSecretVersionId,key=REDIS_BUDGET_URL") }
+Invoke-BoundedCommand yc $revisionArguments 300 | Out-Null
 Write-Host 'Revision deployed. Public access was not changed; run smoke-yandex.ps1 against the HTTPS URL after configuring access.'

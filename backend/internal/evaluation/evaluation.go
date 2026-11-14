@@ -41,13 +41,31 @@ type Cell struct {
 	Count    int    `json:"count"`
 }
 type Report struct {
-	Kind      string    `json:"kind"`
-	Total     int       `json:"total"`
-	Passed    int       `json:"passed"`
-	Failed    int       `json:"failed"`
-	Invalid   int       `json:"invalid"`
-	Outcomes  []Outcome `json:"outcomes"`
-	Confusion []Cell    `json:"confusion"`
+	CoverageStatus string    `json:"coverage_status"`
+	ExpectedCount  *int      `json:"expected_count"`
+	MissingCount   *int      `json:"missing_count"`
+	Kind           string    `json:"kind"`
+	Total          int       `json:"total"`
+	Passed         int       `json:"passed"`
+	Failed         int       `json:"failed"`
+	Invalid        int       `json:"invalid"`
+	Outcomes       []Outcome `json:"outcomes"`
+	Confusion      []Cell    `json:"confusion"`
+}
+
+// SetExpectedCount checks coverage separately from the verdict matches.
+// A count cannot prove that these are the intended cases; IDs must still be reviewed.
+func (r *Report) SetExpectedCount(expected int) error {
+	if expected < 1 || expected > 10000 || r.Total > expected {
+		return fmt.Errorf("expected-count must be 1..10000 and at least the loaded case count")
+	}
+	missing := expected - r.Total
+	r.ExpectedCount, r.MissingCount = &expected, &missing
+	r.CoverageStatus = "complete"
+	if missing > 0 {
+		r.CoverageStatus = "incomplete"
+	}
+	return nil
 }
 
 func Decode(r io.Reader) (Dataset, error) {
@@ -90,7 +108,7 @@ func Decode(r io.Reader) (Dataset, error) {
 }
 
 func Run(d Dataset) Report {
-	report := Report{Kind: d.Kind, Total: len(d.Cases), Outcomes: []Outcome{}, Confusion: []Cell{}}
+	report := Report{CoverageStatus: "unknown", Kind: d.Kind, Total: len(d.Cases), Outcomes: []Outcome{}, Confusion: []Cell{}}
 	counts := map[[2]string]int{}
 	engine := scoring.NewEngine()
 	for _, c := range d.Cases {

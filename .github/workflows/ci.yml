@@ -37,7 +37,7 @@ jobs:
         run: go vet ./...
       - name: Offline scoring evaluation
         working-directory: backend
-        run: go run ./cmd/evaluate -input internal/evaluation/testdata/synthetic.json
+        run: go run ./cmd/evaluate -input internal/evaluation/testdata/synthetic.json -expected-count 5
       - name: PWA JavaScript syntax
         run: |
           node --check dist/app.js
