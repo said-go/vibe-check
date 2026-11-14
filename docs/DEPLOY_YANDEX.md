@@ -91,3 +91,13 @@ Smoke дополнительно сверяет SHA-256 содержимого J
 - [Yandex Cloud: актуальные параметры `yc serverless container revision deploy`](https://yandex.cloud/en/docs/cli/cli-ref/serverless/cli-ref/container/revision/deploy)
 - [Yandex Cloud: квоты, в том числе лимит HTTP-запроса 3.5 МБ](https://yandex.cloud/en/docs/serverless-containers/concepts/limits)
 - [Yandex Cloud: роли Container Registry](https://yandex.cloud/en/docs/container-registry/security/)
+
+## Общий бюджет AI нескольких экземпляров
+
+Опционально задайте `REDIS_BUDGET_URL=rediss://...`, `REDIS_BUDGET_KEY=vibe-check:provider-budget` и `SHARED_ANALYSES_PER_HOUR=30`. URL с паролем — секрет, передавайте через защищённое окружение/Lockbox. В production нужен TLS; для локальных тестов допустим redis://. Все экземпляры одного приложения должны использовать один Redis, одну базу, ключ и одинаковый лимит. Разные окружения используют разные ключи.
+
+Каждая попытка HTTP к AI резервирует единицу общего бюджета атомарным Lua-скриптом Redis; окно длится 3600 секунд с первого вызова и использует TTL Redis, а не часы контейнеров. Повтор после невалидного JSON также расходует единицу. Приватные результаты и успешные idempotency-повторы не обращаются к общему бюджету. При исчерпании возвращается 429/Retry-After, при недоступности Redis — 503 без вызова AI. Автоматический повтор Redis-команды отключён: потерянный ответ мог уже списать единицу.
+
+Локальные клиентские/часовые/параллельные лимиты сохраняются дополнительно. Локальный бюджет может консервативно списаться даже при отказе Redis. Лимит измеряет попытки, а не рубли, и не заменяет облачные ограничения расходов. До публичного релиза нужны Redis без вытеснения бюджетных ключей (`noeviction`), подходящая персистентность/резервирование и проверка отказов: удаление ключа, потеря данных при рестарте или failover сбрасывают счётчик. Скрипт развёртывания Redis не создаёт и секрет REDIS_BUDGET_URL автоматически не привязывает; доступ и параметры сети нужно настроить отдельно.
+
+Локальные тесты используют miniredis, а `REDIS_TEST_URL` включает дополнительный тест конкурентных клиентов с настоящим Redis. Тест создаёт уникальный ключ с TTL один час. Контракт атомарности: [Redis Lua](https://redis.io/docs/latest/develop/interact/programmability/eval-intro/), [INCR rate limiter](https://redis.io/docs/latest/commands/incr/).

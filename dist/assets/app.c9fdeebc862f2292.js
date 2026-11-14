@@ -17,6 +17,8 @@ let cameraGeneration = 0;
 let photoGeneration = 0;
 let deferredInstallPrompt = null;
 let focusBeforeModal = null;
+let backgroundBeforeModal = [];
+let overflowBeforeModal = '';
 let availabilityGeneration = 0;
 let lastPhotoSource = 'file';
 let retryTimer = null;
@@ -75,6 +77,11 @@ function clearPhoto() { photoGeneration++; currentFile = null; currentOriginalHa
 
 function openModal(withCamera = true, returnFocus = document.activeElement) {
   focusBeforeModal = returnFocus;
+  if (modal.hidden) {
+    overflowBeforeModal = document.body.style.overflow;
+    backgroundBeforeModal = ['header', 'main', 'footer'].map(selector => $(selector)).filter(Boolean).map(element => [element, element.inert]);
+    backgroundBeforeModal.forEach(([element]) => { element.inert = true; });
+  }
   cancelRequest(); clearPhoto();
   modal.hidden = false;
   showPendingUpdate();
@@ -83,8 +90,11 @@ function openModal(withCamera = true, returnFocus = document.activeElement) {
   if (withCamera) startCamera();
 }
 function closeModal() {
-  cancelRequest(); clearPhoto(); modal.hidden = true; document.body.style.overflow = ''; stopCamera();
-  focusBeforeModal?.focus();
+  cancelRequest(); clearPhoto(); modal.hidden = true; document.body.style.overflow = overflowBeforeModal; stopCamera();
+  backgroundBeforeModal.forEach(([element, wasInert]) => { element.inert = wasInert; });
+  backgroundBeforeModal = [];
+  if (focusBeforeModal?.isConnected && !focusBeforeModal.disabled) focusBeforeModal.focus();
+  else $('#open-camera').focus();
   focusBeforeModal = null;
   showPendingUpdate();
 }

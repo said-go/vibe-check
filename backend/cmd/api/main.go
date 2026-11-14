@@ -33,8 +33,20 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Info("provider_budget_configured", "scope", "process", "calls_per_hour", cfg.AnalysesPerHour, "calls_per_client_minute", cfg.AnalysesPerClientMinute, "presets_loaded", len(presets))
+	var sharedBudget httpapi.AttemptBudget
+	if cfg.RedisBudgetURL != "" {
+		budget, err := httpapi.NewRedisBudget(cfg.RedisBudgetURL, cfg.RedisBudgetKey, int(cfg.SharedAnalysesPerHour))
+		if err != nil {
+			logger.Error("invalid_shared_budget_configuration")
+			os.Exit(1)
+		}
+		defer budget.Close()
+		sharedBudget = budget
+		logger.Info("shared_provider_budget_configured", "calls_per_hour", cfg.SharedAnalysesPerHour)
+	}
 	api := httpapi.NewWithPresets(logger, cfg.MaxRequestBytes, provider, httpapi.Limits{
-		PerHour: int(cfg.AnalysesPerHour), PerClientMinute: int(cfg.AnalysesPerClientMinute), Concurrent: int(cfg.MaxConcurrentAnalyses),
+		SharedBudget: sharedBudget,
+		PerHour:      int(cfg.AnalysesPerHour), PerClientMinute: int(cfg.AnalysesPerClientMinute), Concurrent: int(cfg.MaxConcurrentAnalyses),
 		TrustedProxyCIDRs: cfg.TrustedProxyCIDRs,
 	}, presets)
 	mux := http.NewServeMux()

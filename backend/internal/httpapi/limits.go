@@ -12,6 +12,7 @@ import (
 // Limits bound billable AI calls per server instance. A reverse proxy must
 // enforce its own public limits when several instances are deployed.
 type Limits struct {
+	SharedBudget      AttemptBudget
 	TrustedProxyCIDRs []netip.Prefix
 	PerHour           int
 	PerClientMinute   int

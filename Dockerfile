@@ -1,6 +1,7 @@
 FROM golang:1.25-alpine AS build
 WORKDIR /src/backend
-COPY backend/go.mod ./
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
 COPY backend/cmd ./cmd
 COPY backend/internal ./internal
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /vibe-api ./cmd/api

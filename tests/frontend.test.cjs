@@ -9,13 +9,14 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
 const response = (body, status = 200, headers = {}) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } });
 
 async function browser() {
+  const docEvents = new Map(); let activeElement = null;
   const nodes = new Map(), timers = new Map(), intervals = new Map(), events = new Map();
   let time = 100000, timerID = 0, handler = async () => response({ status: 'ready', ai_available: true });
   let calls = [], reloads = 0, cameraCalls = 0;
   const node = selector => {
-    if (!nodes.has(selector)) nodes.set(selector, { hidden: selector === '#camera-modal', disabled: false, textContent: '', style: {}, checked: false,
+    if (!nodes.has(selector)) nodes.set(selector, { hidden: selector === '#camera-modal', disabled: false, isConnected: true, inert: false, offsetParent: {}, textContent: '', style: {}, checked: false,
       classList: { add() {}, remove() {}, toggle() {} }, listeners: {}, clicks: 0,
-      addEventListener(type, fn) { this.listeners[type] = fn; }, setAttribute() {}, removeAttribute() {}, focus() {}, append() {}, replaceChildren() {},
+      addEventListener(type, fn) { this.listeners[type] = fn; }, setAttribute() {}, removeAttribute() {}, focus() { activeElement = this; }, append() {}, replaceChildren() {},
       click() { this.clicks++; }, querySelectorAll() { return []; }, getContext() { return { drawImage() {}, fillRect() {}, save() {}, restore() {}, translate() {}, scale() {} }; }
     });
     return nodes.get(selector);
@@ -25,7 +26,7 @@ async function browser() {
     VIBE_HISTORY: { list: async () => [], prepare: (id, result) => ({ id, ...result }) },
     VIBE_SHARE_CARD: { create: async () => new Blob(['card']) } };
   class ClockDate extends Date { static now() { return time; } }
-  const context = vm.createContext({ window, document: { querySelector: node, createElement: () => node('new-node'), body: { style: {} }, addEventListener() {} },
+  const context = vm.createContext({ window, document: { querySelector: node, createElement: () => node('new-node'), body: { style: {} }, get activeElement() { return activeElement; }, addEventListener(type, fn) { docEvents.set(type, fn); } },
     navigator: { onLine: true, mediaDevices: { getUserMedia: async () => { cameraCalls++; throw Error('camera disabled'); } }, serviceWorker: { controller: {}, addEventListener: (t, fn) => swEvents.set(t, fn) } },
     AbortController, Blob, FormData, URL, Date: ClockDate, Intl, console, crypto: require('node:crypto').webcrypto,
     fetch: (...args) => { calls.push(args); return handler(...args); },
@@ -34,7 +35,7 @@ async function browser() {
   });
   vm.runInContext(appSource, context);
   await flush(); calls = [];
-  return { node, run: code => vm.runInContext(code, context), timers, intervals, swEvents,
+  return { node, docEvents, active: () => activeElement, run: code => vm.runInContext(code, context), timers, intervals, swEvents,
     setFetch: fn => { handler = fn; }, calls: () => calls, reloads: () => reloads, cameraCalls: () => cameraCalls,
     advance: ms => { time += ms; for (const fn of [...intervals.values()]) fn(); },
     prepare: () => vm.runInContext("modal.hidden=false; currentFile=new Blob(['jpeg'],{type:'image/jpeg'}); currentImage='test'; analysisKey='same-photo-key-123'; $('#privacy-consent').checked=true;", context)
@@ -145,7 +146,7 @@ test('analysis timeout aborts the request and offers retry without losing photo 
 test('closing the modal cancels without displaying an error or losing control of UI',async()=>{
   const b=await browser();b.prepare();
   b.setFetch(async (url,options)=>url.includes('readyz')?response({status:'ready'}):new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(new DOMException('aborted','AbortError')))));
-  const pending=b.run('analyze()');await flush();b.run('closeModal()');await pending;
+  const pending=b.run('analyze()');await flush();b.docEvents.get('keydown')({key:'Escape'});await pending;
   assert.equal(b.node('#camera-modal').hidden,true);assert.equal(b.node('#error-description').textContent,'');assert.equal(b.timers.size,0);
 });
 test('Retry-After blocks retries until its deadline',async()=>{
@@ -204,4 +205,26 @@ test('multiple updates keep all older caches while any tab is still open',async(
 test('activation without open tabs reclaims old releases but preserves unrelated caches',async()=>{
   const sw=serviceWorker({versions:['vibe-check-a','vibe-check-b','other-app']});
   await sw.activate();assert.deepEqual(sw.deleted,['vibe-check-a','vibe-check-b']);
+});
+
+
+test('modal isolates background and restores focus and overflow on Escape', async () => {
+  const b=await browser();b.node('footer').inert=true;
+  b.run("document.body.style.overflow='scroll'");b.node('#open-file').focus();b.run('openModal(false)');
+  assert.equal(b.node('main').inert,true);assert.equal(b.node('header').inert,true);
+  b.docEvents.get('keydown')({key:'Escape'});
+  assert.equal(b.node('#camera-modal').hidden,true);assert.equal(b.node('main').inert,false);
+  assert.equal(b.node('footer').inert,true);assert.equal(b.active(),b.node('#open-file'));
+  assert.equal(b.run('document.body.style.overflow'),'scroll');
+});
+test('removed modal opener falls back to launch button',async()=>{
+  const b=await browser();b.node('#open-file').focus();b.run('openModal(false)');
+  b.node('#open-file').isConnected=false;b.run('closeModal()');assert.equal(b.active(),b.node('#open-camera'));
+});
+test('Tab wraps visible controls while excluding hidden step',async()=>{
+  const b=await browser();b.run('openModal(false)');
+  const first=b.node('first-control'),last=b.node('last-control'),hidden=b.node('hidden-control');hidden.offsetParent=null;
+  b.node('#camera-modal').querySelectorAll=()=>[first,hidden,last];let prevented=0;
+  last.focus();b.node('#camera-modal').listeners.keydown({key:'Tab',shiftKey:false,preventDefault(){prevented++;}});assert.equal(b.active(),first);
+  b.node('#camera-modal').listeners.keydown({key:'Tab',shiftKey:true,preventDefault(){prevented++;}});assert.equal(b.active(),last);assert.equal(prevented,2);
 });

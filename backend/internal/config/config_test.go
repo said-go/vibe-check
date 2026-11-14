@@ -6,6 +6,31 @@ import (
 	"time"
 )
 
+func TestRedisBudgetConfiguration(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	for _, raw := range []string{"not-url", "https://host", "redis://host?max_retries=5"} {
+		t.Setenv("REDIS_BUDGET_URL", raw)
+		if _, err := Load(); err == nil {
+			t.Fatal("accepted invalid Redis config")
+		}
+	}
+	t.Setenv("REDIS_BUDGET_URL", "redis://localhost:6379/0")
+	c, err := Load()
+	if err != nil || c.SharedAnalysesPerHour != 30 {
+		t.Fatal("default shared config", err)
+	}
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("YANDEX_API_KEY", "test")
+	t.Setenv("YANDEX_FOLDER_ID", "test")
+	if _, err := Load(); err == nil {
+		t.Fatal("production accepted plaintext Redis")
+	}
+	t.Setenv("REDIS_BUDGET_URL", "rediss://user:private@host:6379/0")
+	if _, err := Load(); err != nil {
+		t.Fatal("TLS config rejected", err)
+	}
+}
+
 func TestTrustedProxyConfiguration(t *testing.T) {
 	t.Setenv("APP_ENV", "development")
 	for _, raw := range []string{"bad", "0.0.0.0/0", "::/0", "10.0.0.1/32,", "::ffff:10.0.0.1/128", strings.Repeat("x", 4097)} {

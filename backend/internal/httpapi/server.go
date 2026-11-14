@@ -237,11 +237,21 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 	ctx := vision.WithAttemptGuard(r.Context(), func() error {
 		if firstAttempt {
 			firstAttempt = false
-			return nil
+		} else {
+			providerRetryAfter = reservation.chargeAdditional()
+			if providerRetryAfter > 0 {
+				return vision.ErrRateLimited
+			}
 		}
-		providerRetryAfter = reservation.chargeAdditional()
-		if providerRetryAfter > 0 {
-			return vision.ErrRateLimited
+		if shared := s.limiter.limits.SharedBudget; shared != nil {
+			var budgetErr error
+			providerRetryAfter, budgetErr = shared.Take(r.Context())
+			if budgetErr != nil {
+				return vision.ErrUnavailable
+			}
+			if providerRetryAfter > 0 {
+				return vision.ErrRateLimited
+			}
 		}
 		return nil
 	})

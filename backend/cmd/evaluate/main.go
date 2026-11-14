@@ -5,40 +5,51 @@ import (
 	"flag"
 	"fmt"
 	"github.com/said-go/vibe-check/backend/internal/evaluation"
+	"io"
 	"os"
 	"text/tabwriter"
 )
 
-func main() { os.Exit(run()) }
-func run() int {
-	input := flag.String("input", "", "local dataset JSON (required)")
-	jsonOutput := flag.Bool("json", false, "write structured report to stdout")
-	flag.Parse()
-	if *input == "" || flag.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: evaluate -input dataset.json [-json]")
+func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
+func run(args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("evaluate", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	input := flags.String("input", "", "local dataset JSON (required)")
+	jsonOutput := flags.Bool("json", false, "write structured report to stdout")
+	inputDir := flags.String("input-dir", "", "directory of checkpoint JSON datasets")
+	if flags.Parse(args) != nil {
 		return 2
 	}
-	f, err := os.Open(*input)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	if (*input == "") == (*inputDir == "") || flags.NArg() != 0 {
+		fmt.Fprintln(stderr, "usage: evaluate (-input dataset.json | -input-dir directory) [-json]")
 		return 2
 	}
-	defer f.Close()
-	d, err := evaluation.Decode(f)
+	var d evaluation.Dataset
+	var err error
+	if *inputDir != "" {
+		d, err = evaluation.DecodeDirectory(*inputDir)
+	} else {
+		var f *os.File
+		f, err = os.Open(*input)
+		if err == nil {
+			d, err = evaluation.Decode(f)
+			f.Close()
+		}
+	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(stderr, err)
 		return 2
 	}
 	report := evaluation.Run(d)
 	if *jsonOutput {
-		enc := json.NewEncoder(os.Stdout)
+		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(report); err != nil {
 			return 2
 		}
 	} else {
-		fmt.Printf("Dataset: %s. Saved feature scoring only; NOT photo/AI accuracy.\nTotal: %d; matched: %d; failed: %d; invalid features: %d\n", report.Kind, report.Total, report.Passed, report.Failed, report.Invalid)
-		w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+		fmt.Fprintf(stdout, "Dataset: %s. Saved feature scoring only; NOT photo/AI accuracy.\nTotal: %d; matched: %d; failed: %d; invalid features: %d\n", report.Kind, report.Total, report.Passed, report.Failed, report.Invalid)
+		w := tabwriter.NewWriter(stdout, 0, 4, 2, ' ', 0)
 		fmt.Fprintln(w, "EXPECTED\tACTUAL\tCOUNT")
 		for _, c := range report.Confusion {
 			fmt.Fprintf(w, "%s\t%s\t%d\n", c.Expected, c.Actual, c.Count)
@@ -46,7 +57,7 @@ func run() int {
 		w.Flush()
 		for _, o := range report.Outcomes {
 			if !o.Passed {
-				fmt.Printf("FAIL %q expected=%+v actual=%+v error=%s\n", o.ID, o.Expected, o.Actual, o.Error)
+				fmt.Fprintf(stdout, "FAIL %q expected=%+v actual=%+v error=%s\n", o.ID, o.Expected, o.Actual, o.Error)
 			}
 		}
 	}

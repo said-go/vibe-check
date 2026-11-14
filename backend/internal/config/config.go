@@ -12,6 +12,9 @@ import (
 )
 
 type Config struct {
+	RedisBudgetURL          string
+	RedisBudgetKey          string
+	SharedAnalysesPerHour   int64
 	TrustedProxyCIDRs       []netip.Prefix
 	Environment             string
 	Address                 string
@@ -38,6 +41,9 @@ type Config struct {
 
 func Load() (Config, error) {
 	cfg := Config{
+		RedisBudgetURL:          os.Getenv("REDIS_BUDGET_URL"),
+		RedisBudgetKey:          env("REDIS_BUDGET_KEY", "vibe-check:provider-budget"),
+		SharedAnalysesPerHour:   integer("SHARED_ANALYSES_PER_HOUR", 30),
 		Environment:             env("APP_ENV", "development"),
 		Address:                 env("HTTP_ADDRESS", ":"+env("PORT", "8080")),
 		ReadTimeout:             duration("HTTP_READ_TIMEOUT", 30*time.Second),
@@ -76,6 +82,15 @@ func Load() (Config, error) {
 }
 
 func (c Config) Validate() error {
+	if c.RedisBudgetURL != "" {
+		u, err := url.Parse(c.RedisBudgetURL)
+		if err != nil || u.Hostname() == "" || (u.Scheme != "redis" && u.Scheme != "rediss") || u.RawQuery != "" || u.Fragment != "" || c.SharedAnalysesPerHour < 1 || c.SharedAnalysesPerHour > 1000000 || len(c.RedisBudgetKey) < 1 || len(c.RedisBudgetKey) > 128 {
+			return errors.New("invalid shared Redis budget configuration")
+		}
+		if c.Environment == "production" && u.Scheme != "rediss" {
+			return errors.New("production Redis budget requires TLS (rediss)")
+		}
+	}
 	if c.Environment != "development" && c.Environment != "test" && c.Environment != "production" {
 		return fmt.Errorf("unsupported APP_ENV %q", c.Environment)
 	}

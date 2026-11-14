@@ -77,7 +77,10 @@ func TestPhotoPresetSkipsProviderAndSpoofedDigestDoesNot(t *testing.T) {
 		t.Fatal(err)
 	}
 	presets := PhotoPresets{{originalSHA256: strings.Repeat("a", 64), visualHash: hash, result: scoring.Result{Status: "completed", PrimaryCategory: scoring.CategoryScore{Code: "preset", Title: "Test preset"}}}}
-	handler := NewWithPresets(slog.New(slog.NewTextHandler(io.Discard, nil)), 10<<20, vision.Unconfigured{}, DefaultLimits, presets)
+	shared := &fakeSharedBudget{broken: true}
+	limits := DefaultLimits
+	limits.SharedBudget = shared
+	handler := NewWithPresets(slog.New(slog.NewTextHandler(io.Discard, nil)), 10<<20, vision.Unconfigured{}, limits, presets)
 	ready := httptest.NewRecorder()
 	handler.ServeHTTP(ready, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 	if ready.Code != 200 || !strings.Contains(ready.Body.String(), `"ai_available":false`) || !strings.Contains(ready.Body.String(), `"presets_available":true`) {
@@ -89,6 +92,9 @@ func TestPhotoPresetSkipsProviderAndSpoofedDigestDoesNot(t *testing.T) {
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"title":"Test preset"`) {
 		t.Fatalf("preset response: status %d, body %s", response.Code, response.Body.String())
+	}
+	if shared.calls != 0 {
+		t.Fatal("preset consumed shared budget")
 	}
 	request = makeImageRequest(t, []string{"true"}, [][]byte{patternedImage(t, true)}, "image/jpeg")
 	request.Header.Set("X-Original-Image-SHA256", strings.Repeat("a", 64))
