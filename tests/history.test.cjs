@@ -150,7 +150,57 @@ test('partial outfit share card retains uncertainty outside the joke', async () 
   const record = history().api.prepare('partial', { ...result, provisional: true, assessment_note: 'Видна только часть одежды.' });
   const c = card(); await c.api.create(record);
   assert.ok(c.texts.includes('ПРЕДВАРИТЕЛЬНЫЙ ВЕРДИКТ'));
-  assert.ok(c.texts.join(' ').includes('детали могут изменить результат'));
+  assert.ok(c.texts.join(' ').includes('Видна только часть одежды.'));
+});
+
+test('damaged legacy ratings stay unknown and do not become a portrait verdict', async () => {
+  const h = history({ rows: [{ id: 'damaged', createdAt: 1, category: 'Спортик',
+    score: '75', metrics: { coherence: null, originality: '70', colorHarmony: 75 } }] });
+  const [record] = await h.api.list();
+  assert.equal(record.score, null);
+  assert.equal(record.metrics.coherence, null);
+  assert.equal(record.metrics.originality, null);
+  assert.equal(record.metrics.colorHarmony, 75);
+  assert.equal(record.assessmentScope, 'outfit');
+  const c = card(); await c.api.create(record);
+  const text = c.texts.join(' ');
+  assert.ok(text.includes('Оценка одежды недоступна'));
+  assert.ok(!text.includes('По позе'));
+  assert.ok(!/null%|undefined%|0%/.test(text));
+  assert.equal(c.texts.filter(value => value === '—').length, 2);
+});
+
+test('partial outfit card keeps the actual uncertainty reason within the footer space', async () => {
+  const note = 'На фото не видно обуви, поэтому сочетание пока оценено частично. '.repeat(5);
+  const record = history().api.prepare('partial-long', { ...result, provisional: true, assessment_note: note });
+  const c = card(); await c.api.create(record);
+  const lines = c.textCalls.filter(([, , y]) => y >= 1180 && y <= 1208);
+  assert.equal(lines.length, 2);
+  assert.ok(lines[0][0].includes('не видно обуви'));
+  assert.ok(lines[1][0].endsWith('…'));
+  for (const [text, x, y, width] of lines) {
+    assert.ok(text.length * 12 <= width);
+    assert.ok(x + width <= 1000 && y < 1240);
+  }
+});
+
+test('normalized scores and evidence survive save/list and PNG for full and partial outfits', async () => {
+  for (const provisional of [false, true]) {
+    const h = history();
+    const report = { ...result, score: 75.4, provisional, primary_category: { title: 'Герой боевика-качок' },
+      explanations: ['Первая видимая деталь.', 'Вторая видимая деталь.'],
+      metrics: { coherence: 80.6, originality: 70.1, color_harmony: 75.4 } };
+    const prepared = h.api.prepare('consistent', report);
+    await h.api.save('consistent', report);
+    const [stored] = await h.api.list();
+    for (const key of ['category', 'score', 'summary', 'provisional', 'assessmentScope']) assert.equal(stored[key], prepared[key]);
+    assert.deepEqual(Array.from(stored.explanations), Array.from(prepared.explanations));
+    const c = card(); await c.api.create(stored);
+    assert.ok(c.texts.includes('75'));
+    assert.ok(c.texts.includes('81%'));
+    assert.ok(c.texts.includes('70%'));
+    assert.ok(c.texts.includes('75%'));
+  }
 });
 
 test('renamed categories migrate when reading old saved records', async () => {

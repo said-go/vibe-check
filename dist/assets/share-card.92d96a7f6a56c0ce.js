@@ -48,6 +48,7 @@
   }
 
   async function create(record) {
+    const portraitOnly = record.assessmentScope === 'portrait';
     // A stalled external font must not prevent downloading a local report.
     const loaded = await fontsReady();
     const headingFont = loaded ? 'Unbounded, Arial, sans-serif' : 'Arial, sans-serif';
@@ -72,7 +73,7 @@
     ctx.textAlign = 'left'; ctx.fillStyle = '#ffffff'; ctx.font = `800 42px ${headingFont}`;
     wrap(ctx, record.category.toUpperCase().replace(/-/g, '- '), 130, 435, 535, 60, 3);
     ctx.font = `700 30px ${bodyFont}`;
-    wrap(ctx, record.score == null ? 'По позе и деталям в кадре' : `Оценка одежды: ${record.score}/100`, 130, 620, 520, 44, 2);
+    wrap(ctx, portraitOnly ? 'По позе и деталям в кадре' : record.score == null ? 'Оценка одежды недоступна' : `Оценка одежды: ${record.score}/100`, 130, 620, 520, 44, 2);
 
     ctx.fillStyle = INK; ctx.font = `800 29px ${bodyFont}`;
     const metrics = [
@@ -80,22 +81,22 @@
       ['ОРИГИНАЛЬНОСТЬ', record.metrics.originality],
       ['ЦВЕТ', record.metrics.colorHarmony]
     ];
-    if (record.score == null) {
+    if (portraitOnly) {
       wrap(ctx, record.assessmentNote || 'Вердикт по фото — без оценки одежды', 80, 850, 900, 42, 3);
     } else metrics.forEach(([label, value], index) => {
       const x = 80 + index * 310;
       ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.strokeRect(x, 810, 290, 160);
       ctx.fillText(label, x + 20, 860, 250);
       ctx.font = `800 65px ${headingFont}`;
-      ctx.fillText(`${value}%`, x + 20, 940);
+      ctx.fillText(value == null ? '—' : `${value}%`, x + 20, 940);
       ctx.font = `800 29px ${bodyFont}`;
     });
 
     ctx.font = `700 31px ${bodyFont}`;
     wrap(ctx, record.summary, 80, 1055, 900, 47, 3);
-    if (record.provisional && record.score != null) {
+    if (record.provisional && !portraitOnly) {
       ctx.font = `600 23px ${bodyFont}`;
-      ctx.fillText('По видимой части образа; детали могут изменить результат.', 80, 1210);
+      wrap(ctx, record.assessmentNote || 'По видимой части образа; детали могут изменить результат.', 80, 1180, 920, 28, 2);
     }
     ctx.fillStyle = ACID; ctx.fillRect(0, 1240, WIDTH, 110);
     ctx.fillStyle = INK; ctx.font = `800 26px ${bodyFont}`;

@@ -59,7 +59,8 @@
       const prefix = value.slice(0, max - 1).replace(/[\uD800-\uDBFF]$/, '');
       return `${prefix}…`;
     };
-    const score = value => value == null ? null : Math.max(0, Math.min(100, Number.isFinite(value) ? Math.round(value) : 0));
+    // Missing or damaged legacy values are unknown, not a zero rating.
+    const score = value => Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : null;
     const portrait = result.assessment_scope === 'portrait';
     return {
       id: typeof id === 'string' ? id : '', createdAt: Date.now(),

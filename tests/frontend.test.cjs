@@ -4,6 +4,7 @@ const vm = require('node:vm');
 const fs = require('node:fs');
 const path = require('node:path');
 const appSource = fs.readFileSync(path.join(__dirname, '../dist/app.js'), 'utf8');
+const historySource = fs.readFileSync(path.join(__dirname, '../dist/history.js'), 'utf8');
 const swSource = fs.readFileSync(path.join(__dirname, '../dist/sw.js'), 'utf8');
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const response = (body, status = 200, headers = {}) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } });
@@ -33,9 +34,11 @@ async function browser() {
     setTimeout: (fn, ms) => { const id = ++timerID; timers.set(id, { fn, ms }); return id; }, clearTimeout: id => timers.delete(id),
     setInterval: fn => { const id = ++timerID; intervals.set(id, fn); return id; }, clearInterval: id => intervals.delete(id)
   });
+  vm.runInContext(historySource, context);
+  window.VIBE_HISTORY = { ...window.VIBE_HISTORY, list: async () => [] };
   vm.runInContext(appSource, context);
   await flush(); calls = [];
-  return { node, docEvents, active: () => activeElement, run: code => vm.runInContext(code, context), timers, intervals, swEvents,
+  return { node, docEvents, events, active: () => activeElement, run: code => vm.runInContext(code, context), timers, intervals, swEvents,
     setFetch: fn => { handler = fn; }, calls: () => calls, reloads: () => reloads, cameraCalls: () => cameraCalls,
     advance: ms => { time += ms; for (const fn of [...intervals.values()]) fn(); },
     prepare: () => vm.runInContext("modal.hidden=false; currentFile=new Blob(['jpeg'],{type:'image/jpeg'}); currentImage='test'; analysisKey='same-photo-key-123'; $('#privacy-consent').checked=true;", context)
@@ -142,7 +145,7 @@ test('invalid completed response never displays diagnostics and can be retried',
   let result={score:70};
   b.setFetch(async url=>url.includes('readyz')?response({status:'ready',diagnostics_available:true}):response({status:'completed',analysis_id:'diag-retry',result,diagnostics}));
   await b.run('analyze()');
-  assert.match(b.node('#error-description').textContent,/неверный ответ/);
+  assert.match(b.node('#error-description').textContent,/непонятный ответ/);
   assert.equal(b.node('#retry-analysis').hidden,false);
   assert.equal(b.node('#local-diagnostics').hidden,true);
   assert.equal(b.node('#diagnostics-content').children.length,0);
@@ -209,14 +212,14 @@ test('legacy level titles never appear in history or shared text', async () => {
 test('malformed successful response shows an actionable error', async () => {
   const b=await browser();b.prepare();
   b.setFetch(async url=>url.includes('readyz')?response({status:'ready'}):response({status:'completed'}));
-  await b.run('analyze()');assert.match(b.node('#error-description').textContent,/неверный ответ/);
+  await b.run('analyze()');assert.match(b.node('#error-description').textContent,/непонятный ответ/);
 });
 
 test('incomplete result is rejected before rendering or saving any record', async () => {
   const b=await browser();b.prepare();
   b.setFetch(async url=>url.includes('readyz')?response({status:'ready'}):response({status:'completed',analysis_id:'a',result:{score:42}}));
   await b.run('analyze()');
-  assert.match(b.node('#error-description').textContent,/неверный ответ/);
+  assert.match(b.node('#error-description').textContent,/непонятный ответ/);
   assert.equal(b.run('currentRecord'),null);
 });
 
@@ -269,7 +272,7 @@ test('invalid explanation metadata is rejected before saving a record',async()=>
   b.setFetch(async url=>url.includes('readyz')?response({status:'ready'}):response({status:'completed',analysis_id:'bad',result:{score:70,primary_category:{title:'Тест'},level_title:'Тест',summary:'Тест',metrics:{coherence:70,originality:70,color_harmony:70},explanations:[{text:'wrong'}]}}));
   await b.run('analyze()');
   assert.equal(b.run('currentRecord'),null);
-  assert.match(b.node('#error-description').textContent,/неверный ответ/);
+  assert.match(b.node('#error-description').textContent,/непонятный ответ/);
 });
 
 test('no style evidence shows a specific photo suggestion without a fabricated verdict',async()=>{
@@ -348,6 +351,53 @@ test('closing the modal cancels without displaying an error or losing control of
   b.setFetch(async (url,options)=>url.includes('readyz')?response({status:'ready'}):new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(new DOMException('aborted','AbortError')))));
   const pending=b.run('analyze()');await flush();b.docEvents.get('keydown')({key:'Escape'});await pending;
   assert.equal(b.node('#camera-modal').hidden,true);assert.equal(b.node('#error-description').textContent,'');assert.equal(b.timers.size,0);
+});
+test('going offline during readiness never uploads and reconnect only refreshes status',async()=>{
+  const b=await browser();b.prepare();let resolveReady;
+  b.setFetch(()=>new Promise(resolve=>{resolveReady=resolve;}));
+  const pending=b.run('analyze()');await flush();
+  b.run('navigator.onLine=false');resolveReady(response({status:'ready'}));await pending;
+  assert.equal(b.calls().filter(([,opts])=>opts?.method==='POST').length,0);
+  assert.match(b.node('#error-description').textContent,/Интернет пропал.*Фото не отправлено/);
+  assert.equal(b.run('analysisKey'),'same-photo-key-123');
+  b.setFetch(async()=>response({status:'ready'}));b.run('navigator.onLine=true');
+  await b.events.get('online')();
+  assert.equal(b.calls().filter(([,opts])=>opts?.method==='POST').length,0);
+});
+test('cancelled readiness cannot upload even when transport ignores abort',async()=>{
+  const b=await browser();b.prepare();let resolveReady;
+  b.setFetch(()=>new Promise(resolve=>{resolveReady=resolve;}));
+  const pending=b.run('analyze()');await flush();b.run('closeModal()');
+  resolveReady(response({status:'ready'}));await pending;
+  assert.equal(b.calls().filter(([,opts])=>opts?.method==='POST').length,0);
+  assert.equal(b.node('#camera-modal').hidden,true);
+  assert.equal(b.timers.size,0);
+});
+test('late successful transport response after deadline cannot render a report',async()=>{
+  const b=await browser();b.prepare();let resolveUpload;
+  b.setFetch(async url=>url.includes('readyz')?response({status:'ready'}):new Promise(resolve=>{resolveUpload=resolve;}));
+  const pending=b.run('analyze()');await flush();
+  [...b.timers.values()].find(t=>t.ms===125000).fn();
+  resolveUpload(response({status:'completed',analysis_id:'late',result:{score:70,primary_category:{title:'Стиляга'},summary:'Late',metrics:{coherence:70,originality:70,color_harmony:70}}}));
+  await pending;
+  assert.equal(b.run('currentRecord'),null);
+  assert.match(b.node('#error-description').textContent,/слишком много времени/);
+  assert.equal(b.run('analysisKey'),'same-photo-key-123');
+});
+test('double click and reconnection do not resend a failed upload; manual retry keeps its key',async()=>{
+  const b=await browser();b.prepare();let rejectUpload;
+  b.setFetch(async url=>url.includes('readyz')?response({status:'ready'}):new Promise((resolve,reject)=>{rejectUpload=reject;}));
+  const pending=b.run('analyze()');await flush();await b.run('analyze()');
+  rejectUpload(new TypeError('network failure'));await pending;
+  assert.equal(b.calls().filter(([,opts])=>opts?.method==='POST').length,1);
+  assert.match(b.node('#error-description').textContent,/Фото могло дойти.*автоматически фото не отправится/);
+  b.setFetch(async url=>url.includes('readyz')?response({status:'ready'}):response({code:'ai_unavailable',retryable:true},503));
+  await b.events.get('online')();
+  assert.equal(b.calls().filter(([,opts])=>opts?.method==='POST').length,1);
+  await b.run('analyze()');
+  const uploads=b.calls().filter(([,opts])=>opts?.method==='POST');
+  assert.equal(uploads.length,2);
+  assert.equal(uploads[0][1].headers['Idempotency-Key'],uploads[1][1].headers['Idempotency-Key']);
 });
 test('Retry-After blocks retries until its deadline',async()=>{
   const b=await browser();b.prepare();

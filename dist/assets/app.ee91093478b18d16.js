@@ -432,7 +432,7 @@ async function refreshAvailability() {
   const ready = await analysisReady();
   if (generation !== availabilityGeneration) return;
   setDiagnosticsAvailability(ready);
-  status.textContent = ready ? (ready.ai_available === false ? 'Сервер доступен. AI-анализ временно недоступен; часть результатов может быть доступна.' : 'Сервер AI-анализа подключён.') : 'AI-анализ пока не подключён. Интерфейс доступен для просмотра.';
+  status.textContent = ready ? (ready.ai_available === false ? 'Сервер доступен. AI-анализ временно недоступен; часть результатов может быть доступна.' : 'Сервер AI-анализа подключён.') : 'Сервер анализа сейчас недоступен. Интерфейс доступен для просмотра.';
   status.classList.add(ready ? 'available' : 'unavailable');
 }
 async function analyze() {
@@ -442,6 +442,7 @@ async function analyze() {
   cancelRequest(); const generation = requestGeneration; const controller = new AbortController(); activeRequest = controller;
   clearDiagnostics();
   let timedOut = false;
+  let uploadStarted = false;
   const deadline = setTimeout(() => { timedOut = true; controller.abort(); }, 125000);
   showStep('analyzing-step'); $('#analysis-image').src = currentImage;
   $('#analysis-status').textContent = 'Проверяем сервер анализа'; $('#progress-bar').style.width = '15%';
@@ -449,6 +450,10 @@ async function analyze() {
     const ready = await analysisReady(controller.signal);
     if (generation !== requestGeneration || modal.hidden) return;
     if (timedOut) throw new Error('analysis_timeout');
+    if (!navigator.onLine) {
+      showError('Интернет пропал. Фото не отправлено — подключись к сети и нажми «Попробовать ещё раз».', true);
+      return;
+    }
     setDiagnosticsAvailability(ready);
     if (!ready) {
       showError('Сервер анализа сейчас не отвечает. Фото не отправлено — попробуй позже.', true);
@@ -461,9 +466,11 @@ async function analyze() {
     const wantDiagnostics = diagnosticsAvailable && $('#diagnostics-consent').checked;
     if (wantDiagnostics) headers['X-Vibe-Diagnostics'] = '1';
     if (currentOriginalHash) headers['X-Original-Image-SHA256'] = currentOriginalHash;
+    uploadStarted = true;
     const response = await fetch(`${API_BASE}/v1/analyses`, { method: 'POST', body: payload, headers, signal: controller.signal });
     const data = await response.json().catch(() => ({}));
     if (generation !== requestGeneration || modal.hidden) return;
+    if (timedOut) throw new Error('analysis_timeout');
     if (!response.ok) {
       const error = data?.error || data || {};
       const unavailable = [404, 502, 503, 504].includes(response.status);
@@ -496,11 +503,11 @@ async function analyze() {
   } catch (error) {
     if (generation === requestGeneration && !modal.hidden) clearDiagnostics();
     if (timedOut && generation === requestGeneration && !modal.hidden) {
-      showError('Анализ занял слишком много времени. Попробуй повторить запрос.', true);
+      showError('Анализ занял слишком много времени. Ответ не пришёл вовремя. Повтори вручную — автоматически фото не отправится.', true);
       return;
     }
     if (error.name !== 'AbortError' && generation === requestGeneration && !modal.hidden) {
-      showError(error.message === 'invalid_response' ? 'Сервер AI-анализа пока не настроен или вернул неверный ответ.' : 'Нет связи с сервером анализа. Проверь интернет и попробуй ещё раз.', true);
+      showError(error.message === 'invalid_response' ? 'Сервер вернул непонятный ответ. Попробуй повторить анализ.' : uploadStarted ? 'Связь прервалась. Фото могло дойти до сервера, но ответ не получен. Проверь интернет и повтори вручную — автоматически фото не отправится.' : 'Нет связи с сервером анализа. Фото не отправлено. Проверь интернет и попробуй ещё раз.', true);
     }
   } finally { clearTimeout(deadline); if (generation === requestGeneration) activeRequest = null; }
 }
@@ -517,17 +524,18 @@ function showResult(result, analysisId) {
   $('#share').disabled = false;
   $('#share-note').textContent = '';
   $('#result-image').src = currentImage;
-  const portraitOnly = result.assessment_scope === 'portrait';
+  // The report, history and PNG use the same normalized display record.
+  const portraitOnly = record.assessmentScope === 'portrait';
   $('#result-score').hidden = portraitOnly;
-  $('#result-score').textContent = result.score;
-  $('#result-title').textContent = result.primary_category.title;
-  $('#result-level').textContent = `Оценка одежды: ${result.score}/100`;
+  $('#result-score').textContent = record.score;
+  $('#result-title').textContent = record.category;
+  $('#result-level').textContent = `Оценка одежды: ${record.score}/100`;
   $('#result-level').hidden = portraitOnly;
-  $('#result-description').textContent = result.summary;
-  $('#result-status').textContent = result.provisional ? 'предварительный вердикт' : 'вердикт готов';
-  $('#result-assessment-note').textContent = result.provisional ? (result.assessment_note || 'По этому кадру оценка пока предварительная.') : '';
-  $('#result-assessment-note').hidden = !result.provisional;
-  const explanations = Array.isArray(result.explanations) ? result.explanations.filter(text => typeof text === 'string' && text.trim()).slice(0, 3) : [];
+  $('#result-description').textContent = record.summary;
+  $('#result-status').textContent = record.provisional ? 'предварительный вердикт' : 'вердикт готов';
+  $('#result-assessment-note').textContent = record.provisional ? (record.assessmentNote || 'По этому кадру оценка пока предварительная.') : '';
+  $('#result-assessment-note').hidden = !record.provisional;
+  const explanations = record.explanations.filter(text => text.trim());
   $('#result-reasons').replaceChildren(...explanations.map(text => {
     const item = document.createElement('li');
     item.textContent = text;
@@ -535,10 +543,10 @@ function showResult(result, analysisId) {
   }));
   $('#result-explanation').hidden = !explanations.length;
   $('#result-stats').hidden = portraitOnly;
-  $('#style-stat').textContent = `${result.metrics.coherence}%`;
-  $('#energy-stat').textContent = `${result.metrics.originality}%`;
-  $('#aura-stat').textContent = `${result.metrics.color_harmony}%`;
-  $('#result-recommendations').textContent = Array.isArray(result.recommendations) ? result.recommendations.join(' · ') : '';
+  $('#style-stat').textContent = `${record.metrics.coherence}%`;
+  $('#energy-stat').textContent = `${record.metrics.originality}%`;
+  $('#aura-stat').textContent = `${record.metrics.colorHarmony}%`;
+  $('#result-recommendations').textContent = record.recommendations.join(' · ');
   showStep('result-step');
 }
 
@@ -765,9 +773,14 @@ $('#update-app').addEventListener('click', () => {
   pendingServiceWorker.postMessage({ type: 'SKIP_WAITING' });
 });
 if ('serviceWorker' in navigator) {
-  const hadServiceWorkerController = Boolean(navigator.serviceWorker.controller);
+  let hadServiceWorkerController = Boolean(navigator.serviceWorker.controller);
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!hadServiceWorkerController && !updateRequested) return;
+    // Ignore only the first installation's claim. This tab can stay open while
+    // another tab activates later releases, which must offer a safe reload.
+    if (!hadServiceWorkerController && !updateRequested) {
+      hadServiceWorkerController = true;
+      return;
+    }
     if (updateRequested && modal.hidden) window.location.reload();
     else { updateReadyToReload = true; showPendingUpdate(); }
   });
