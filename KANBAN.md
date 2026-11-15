@@ -4,7 +4,7 @@
 
 ## Текущее состояние
 
-Статус на 15 ноября 2026 года: [публичный ВАЙБЧЕК](https://bba97v12361fnqujgqh4.containers.yandexcloud.net/) запущен, основной облачный AI-сценарий проверен. Runtime-коммит — `b9c2cd2eebc9ac5bc4d0a7eaf1692610ed67a5f5`, [CI прошёл](https://github.com/said-go/vibe-check/actions/runs/43684582923). Статический Sites остаётся демонстрацией интерфейса. Остальные критерии [плана разработки](docs/VibeCheck-development-plan.docx) отмечены ниже.
+Статус на 15 ноября 2026 года: [публичный ВАЙБЧЕК](https://bba97v12361fnqujgqh4.containers.yandexcloud.net/) запущен, основной облачный AI-сценарий проверен. Runtime-коммит — `e405b1d7eaaff484f8760449e87e822b791fdb50`, [CI прошёл](https://github.com/said-go/vibe-check/actions/runs/43699030827). Статический Sites остаётся демонстрацией интерфейса. Остальные критерии [плана разработки](docs/VibeCheck-development-plan.docx) отмечены ниже.
 
 Registry, контейнер, runtime service account, Lockbox и YDB Serverless работают в облачном сценарии. Профиль: 1 vCPU/1 ГБ, без прогретых экземпляров; общий durable-лимит 5 AI-попыток/час и 100/календарный месяц UTC, включая повторы. Billing-бюджет 1000 ₽ с порогами уведомлений 500/800/950 ₽ не является жёстким потолком расходов. При малом трафике расчётная стоимость ниже бюджета, но публичный трафик и токенаж не гарантированы. Production использует ключ из Lockbox; локальные presets не загружались. Подробности — [инструкция развёртывания](docs/DEPLOY_YANDEX.md).
 
