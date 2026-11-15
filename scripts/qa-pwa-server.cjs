@@ -9,6 +9,7 @@ const source = path.join(project, 'dist');
 const fixture = path.join(project, 'backend/private/pwa-browser-qa');
 const stateFile = path.join(fixture, 'state.json');
 const port = Number(process.env.PWA_QA_PORT || 8092);
+const memoryPanel = process.env.PWA_QA_MEMORY === '1';
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw Error('Invalid QA port');
 const hash = data => crypto.createHash('sha256').update(data).digest('hex').slice(0, 16);
 const text = file => fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
@@ -21,7 +22,8 @@ for (const version of ['v1', 'v2']) {
   fs.writeFileSync(path.join(root, cssName), css);
   const html = text(path.join(source, 'index.html'))
     .replace(/assets\/styles\.[a-f0-9]{16}\.css/g, cssName)
-    .replace('<body>', `<body><p id="qa-release">LOCAL PWA QA ${version.toUpperCase()} — synthetic, no AI</p>`);
+    .replace('<body>', `<body><p id="qa-release">LOCAL PWA QA ${version.toUpperCase()} — synthetic, no AI</p>`)
+    .replace('</body>', `${memoryPanel ? '<script src="/__qa/memory.js"></script>' : ''}</body>`);
   fs.writeFileSync(path.join(root, 'index.html'), html);
   const worker = text(path.join(source, 'sw.js'))
     .replace(/const CACHE_NAME = .*?;/, `const CACHE_NAME = 'vibe-check-qa-${hash(html)}';`)
@@ -39,6 +41,10 @@ const server = http.createServer(async (req,res) => {
   const url = new URL(req.url,'http://127.0.0.1');
   if (url.pathname === '/__qa/status') return json(200,{...state,...counts});
   if (state.available === false) return json(503,{error:'QA server unavailable'});
+  if (memoryPanel && url.pathname === '/__qa/memory.js' && req.method === 'GET') {
+    res.writeHead(200,{'Content-Type':'application/javascript; charset=utf-8','Cache-Control':'no-store'});
+    return res.end(fs.readFileSync(path.join(__dirname,'qa-memory.js')));
+  }
   if (url.pathname === '/api/readyz') return json(200,{status:'ready',ai_available:true,diagnostics_available:false});
   if (url.pathname === '/api/healthz') return json(200,{status:'ok'});
   if (url.pathname === '/api/v1/analyses' && req.method === 'POST') {
