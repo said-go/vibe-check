@@ -735,3 +735,103 @@ test('step headings expose the current explanation when focus arrives', async()=
   b.run("showError('Интернет пропал. Фото не отправлено.',true)");
   assert.equal(spokenError,'Интернет пропал. Фото не отправлено.');
 });
+
+test('repeated camera open and close releases every track and video attachment',async()=>{
+  const b=await browser();
+  b.run(`let stoppedTracks=0;
+    navigator.mediaDevices.getUserMedia=async()=>({getTracks:()=>[{stop(){stoppedTracks++;}},{stop(){stoppedTracks++;}}]});`);
+  for(let i=0;i<10;i++) {
+    b.run('openModal(true)');await flush();
+    assert.ok(b.node('#video').srcObject);
+    b.run('closeModal()');
+    assert.equal(b.node('#video').srcObject,null);
+    assert.equal(b.node('#video').onloadedmetadata,null);
+    assert.equal(b.node('#capture').disabled,true);
+  }
+  assert.equal(b.run('stoppedTracks'),20);
+  assert.equal(b.run('stream'),null);
+});
+
+test('camera permission resolving after close stops the returned tracks immediately',async()=>{
+  const b=await browser();
+  b.run(`let resolveCamera,lateStops=0;
+    navigator.mediaDevices.getUserMedia=()=>new Promise(resolve=>{resolveCamera=resolve;});
+    openModal(true);closeModal();
+    resolveCamera({getTracks:()=>[{stop(){lateStops++;}}]});`);
+  await flush();
+  assert.equal(b.run('lateStops'),1);
+  assert.equal(b.node('#video').srcObject,null);
+  assert.equal(b.run('stream'),null);
+  assert.equal(b.node('#camera-modal').hidden,true);
+});
+
+test('failed image decoding releases the source object URL',async()=>{
+  const b=await browser();b.prepare();
+  await b.run(`let revokedURLs=[];
+    URL={createObjectURL:()=> 'blob:source-photo',revokeObjectURL:url=>revokedURLs.push(url)};
+    globalThis.Image=class {async decode(){throw Error('bad image');}};
+    useFile(new Blob(['image']));`);
+  assert.equal(b.run('revokedURLs.join()'),'blob:source-photo');
+  assert.equal(b.run('currentFile'),null);
+});
+
+test('closing clears retained photo, card and canvas data',async()=>{
+  const b=await browser();b.prepare();
+  for(const selector of ['#consent-image','#analysis-image','#result-image']) {
+    b.node(selector).src='data:image/jpeg;base64,fixture';
+    b.node(selector).removeAttribute=function(name){delete this[name];};
+  }
+  b.run(`canvas.width=1600;canvas.height=1200;currentCardBlob=new Blob(['card']);
+    currentRecord={id:'fixture'};currentOriginalHash='fixture';closeModal();`);
+  assert.equal(b.run('currentFile'),null);assert.equal(b.run('currentImage'),'');
+  assert.equal(b.run('currentCardBlob'),null);assert.equal(b.run('currentRecord'),null);
+  assert.equal(b.run('currentOriginalHash'),'');assert.equal(b.run('analysisKey'),'');
+  assert.equal(b.node('#canvas').width,0);assert.equal(b.node('#canvas').height,0);
+  for(const selector of ['#consent-image','#analysis-image','#result-image']) assert.equal(b.node(selector).src,undefined);
+});
+
+test('older history read cannot restore an entry removed by a later refresh', async()=>{
+  const b=await browser();
+  b.run("window.VIBE_HISTORY.list=()=>new Promise(resolve=>window.oldHistoryResolve=resolve)");
+  const oldRead=b.run('renderHistory()');
+  b.run('window.VIBE_HISTORY.list=async()=>[]');
+  await b.run('renderHistory()');
+  b.run("window.oldHistoryResolve([{id:'deleted',category:'Спортик',createdAt:1000,score:70}])");
+  assert.equal(await oldRead,false);
+  assert.equal(b.run('historyRows.length'),0);
+  assert.equal(b.node('#history-list').children.length,0);
+  assert.equal(b.node('#clear-history').hidden,true);
+  assert.equal(b.node('#history-message').textContent,'История пока пуста.');
+});
+
+test('older history failure cannot erase a newer successful refresh', async()=>{
+  const b=await browser();
+  b.run("window.VIBE_HISTORY.list=()=>new Promise((_,reject)=>window.oldHistoryReject=reject)");
+  const oldRead=b.run('renderHistory()');
+  b.run("window.VIBE_HISTORY.list=async()=>[{id:'new',category:'Спортик',createdAt:1000,score:70}]");
+  await b.run('renderHistory()');
+  b.run("window.oldHistoryReject(Error('stale failure'))");
+  assert.equal(await oldRead,false);
+  assert.equal(b.run('historyRows[0].id'),'new');
+  assert.equal(b.node('#history-list').children.length,1);
+  assert.equal(b.node('#clear-history').hidden,false);
+  assert.match(b.node('#history-message').textContent,/Сохранено результатов: 1/);
+});
+
+test('cancelled upload cannot replace a newer photo result or release its request',async()=>{
+  const b=await browser();b.prepare();
+  const uploads=[];
+  b.setFetch(async url=>url.includes('readyz')?response({status:'ready'}):new Promise(resolve=>uploads.push(resolve)));
+  const oldRequest=b.run('analyze()');await flush();
+  b.run("chooseAgain(); currentFile=new Blob(['new-photo']); currentImage='new'; analysisKey='new-photo-key'; $('#privacy-consent').checked=true");
+  const newRequest=b.run('analyze()');await flush();
+  uploads[0](response({code:'ai_unavailable',retryable:true},503));await oldRequest;
+  assert.notEqual(b.run('activeRequest'),null);
+  assert.equal(b.node('#error-description').textContent,'');
+  uploads[1](response({status:'completed',analysis_id:'new-analysis',result:{score:70,primary_category:{title:'Стиляга'},summary:'New photo',metrics:{coherence:70,originality:70,color_harmony:70}}}));
+  await newRequest;
+  assert.equal(b.run('currentRecord.id'),'new-analysis');
+  assert.equal(b.node('#result-description').textContent,'New photo');
+  assert.equal(b.run('activeRequest'),null);
+  assert.equal(b.timers.size,0);
+});

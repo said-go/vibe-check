@@ -11,6 +11,7 @@ let analysisKey = '';
 let currentRecord = null;
 let currentCardBlob = null;
 let historyRows = [];
+let historyGeneration = 0;
 let activeRequest = null;
 let requestGeneration = 0;
 let cameraGeneration = 0;
@@ -589,15 +590,19 @@ function historyCard(record) {
 }
 
 async function renderHistory() {
+  const generation = ++historyGeneration;
   const list = $('#history-list');
   const message = $('#history-message');
   try {
-    historyRows = await window.VIBE_HISTORY.list();
+    const rows = await window.VIBE_HISTORY.list();
+    if (generation !== historyGeneration) return false;
+    historyRows = rows;
     list.replaceChildren(...historyRows.map(historyCard));
     $('#clear-history').hidden = historyRows.length === 0;
     message.textContent = historyRows.length ? `Сохранено результатов: ${historyRows.length}. Фото не сохраняются.` : 'История пока пуста.';
     return true;
   } catch {
+    if (generation !== historyGeneration) return false;
     historyRows = [];
     list.replaceChildren();
     $('#clear-history').hidden = true;

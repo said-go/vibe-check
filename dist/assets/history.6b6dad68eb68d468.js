@@ -7,11 +7,22 @@
     return new Promise((resolve, reject) => {
       if (!('indexedDB' in window)) { reject(new Error('storage_unavailable')); return; }
       const request = indexedDB.open(DATABASE, 1);
+      let blocked = false;
+      request.onblocked = () => {
+        blocked = true;
+        reject(new Error('storage_blocked'));
+      };
       request.onupgradeneeded = () => {
+        // An open request cannot be cancelled. Do not change storage after the
+        // caller has already received a blocked error and may have retried.
+        if (blocked) { request.transaction.abort(); return; }
         const db = request.result;
         if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'id' });
       };
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => {
+        if (blocked) { request.result.close(); return; }
+        resolve(request.result);
+      };
       request.onerror = () => reject(request.error || new Error('storage_unavailable'));
     });
   }

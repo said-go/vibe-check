@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const result = { score: 75, level_title: 'Стиляга', primary_category: { title: 'Спорт-шик' }, summary: 'Всё хорошо', metrics: { coherence: 80, originality: 70, color_harmony: 75 }, recommendations: ['Один акцент'], photo: 'SECRET_IMAGE' };
-function history({ unavailable = false, fail = false, rows = [] } = {}) {
+function history({ unavailable = false, fail = false, blocked = false, rows = [] } = {}) {
   const data = new Map(rows.map(row => [row.id, row]));
   let closed = 0;
   const db = { close() { closed++; }, transaction() {
@@ -17,11 +17,37 @@ function history({ unavailable = false, fail = false, rows = [] } = {}) {
     setImmediate(() => { if (fail) { tx.error = Object.assign(new Error('quota'), { name: 'QuotaExceededError' }); tx.onabort?.(); } else tx.oncomplete?.(); });
     return tx;
   } };
-  const indexedDB = { open() { const req = {}; queueMicrotask(() => { req.result = db; req.onsuccess(); }); return req; } };
+  let blockedRequest;
+  const indexedDB = { open() { const req = {}; queueMicrotask(() => {
+    req.result = db;
+    if (blocked) { blocked = false; blockedRequest = req; req.onblocked?.(); }
+    else req.onsuccess();
+  }); return req; } };
   const window = unavailable ? {} : { indexedDB };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../dist/history.js'), 'utf8'), { window, indexedDB, Date });
-  return { api: window.VIBE_HISTORY, data, closed: () => closed };
+  return { api: window.VIBE_HISTORY, data, closed: () => closed,
+    blockedRequest: () => blockedRequest };
 }
+
+test('blocked storage rejects without a late save and a later retry can recover', async () => {
+  const h = history({ blocked: true });
+  await assert.rejects(h.api.save('blocked', result), /storage_blocked/);
+  h.blockedRequest().onsuccess();
+  assert.equal(h.closed(), 1, 'late open connection must be closed');
+  assert.equal(h.data.size, 0, 'failed save must not run after storage becomes available');
+  await h.api.save('retry', result);
+  assert.equal(h.data.size, 1);
+  assert.ok(h.data.has('retry'));
+});
+
+test('a blocked open aborts a late upgrade rather than mutating storage', async () => {
+  const h = history({ blocked: true });
+  await assert.rejects(h.api.list(), /storage_blocked/);
+  let aborted = false;
+  h.blockedRequest().transaction = { abort() { aborted = true; } };
+  h.blockedRequest().onupgradeneeded();
+  assert.equal(aborted, true);
+});
 test('history saves a whitelist without image data and migrates old category titles', async () => {
   const h = history(); await h.api.save('one', result);
   const rows = await h.api.list(); assert.equal(rows[0].category, 'Спортик');
