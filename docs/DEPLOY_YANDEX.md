@@ -2,7 +2,7 @@
 
 Для рабочего AI-сценария разверните **весь проект одним контейнером**: Go сервер раздаёт PWA на `/` и API на `/api`. Это сохраняет один HTTPS origin для камеры, Service Worker и загрузки фото. Опубликованный статический Sites остаётся демонстрацией интерфейса до переключения пользователей на адрес контейнера.
 
-На 15 ноября 2026 приложение доступно по публичному HTTPS: [ВАЙБЧЕК](https://bba97v12361fnqujgqh4.containers.yandexcloud.net/). Runtime-коммит — `986d6dddda830dfdf656f6dbc5061eddc3ad6b15`, [CI прошёл](https://github.com/said-go/vibe-check/actions/runs/43725765714). Registry, контейнер, runtime service account, Lockbox и YDB Serverless настроены; production использует AI-ключ из Lockbox, локальные presets не загружались.
+На 15 ноября 2026 приложение доступно по публичному HTTPS: [ВАЙБЧЕК](https://bba97v12361fnqujgqh4.containers.yandexcloud.net/). Runtime-коммит — `decae9e855ba05819a1d1a16ec42037b724e6473`, [CI прошёл](https://github.com/said-go/vibe-check/actions/runs/43727158931). Registry, контейнер, runtime service account, Lockbox и YDB Serverless настроены; production использует AI-ключ из Lockbox, локальные presets не загружались.
 
 До открытия доступа закрытые health/ready вернули 200: AI и общий бюджет доступны, диагностика и presets выключены. Реальный облачный анализ вернул HTTP 200, `completed` и ожидаемую категорию `cool_pose`. Проверки настоящей YDB с 16 и 2 конкурентными запросами подтвердили лимит 5/5, отсутствие расхода при readiness, сохранение лимита для нового клиента и отказ при месячном лимите. После открытия публичный smoke прошёл для health/ready, HTML, хешированных ресурсов и манифеста. Это подтверждает запуск основного сценария, а не точность AI на репрезентативной выборке.
 
