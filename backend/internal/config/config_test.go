@@ -139,3 +139,84 @@ func TestProductionRejectsPlaintextAIEndpoint(t *testing.T) {
 		t.Fatal("production must reject plaintext AI endpoint")
 	}
 }
+
+func TestYDBBudgetDefaultsAndOverrides(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("REDIS_BUDGET_URL", "")
+	t.Setenv("YDB_CONNECTION_STRING", "grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/folder/db")
+	t.Setenv("YDB_BUDGET_KEY", "")
+	t.Setenv("SHARED_ANALYSES_PER_HOUR", "")
+	t.Setenv("SHARED_ANALYSES_PER_MONTH", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.YDBBudgetKey != "vibe-check-provider-budget" || cfg.SharedAnalysesPerHour != 30 || cfg.SharedAnalysesPerMonth != 100 {
+		t.Fatal("incorrect YDB defaults")
+	}
+	t.Setenv("YDB_BUDGET_KEY", "release:budget_2-test")
+	t.Setenv("SHARED_ANALYSES_PER_HOUR", "7")
+	t.Setenv("SHARED_ANALYSES_PER_MONTH", "50")
+	cfg, err = Load()
+	if err != nil || cfg.YDBBudgetKey != "release:budget_2-test" || cfg.SharedAnalysesPerHour != 7 || cfg.SharedAnalysesPerMonth != 50 {
+		t.Fatalf("YDB overrides: %v", err)
+	}
+}
+
+func TestYDBBudgetRejectsInvalidConfiguration(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("REDIS_BUDGET_URL", "")
+	t.Setenv("YDB_CONNECTION_STRING", "grpcs://host:2135/?database=/db")
+	t.Setenv("YDB_BUDGET_KEY", "budget")
+	t.Setenv("SHARED_ANALYSES_PER_HOUR", "30")
+	t.Setenv("SHARED_ANALYSES_PER_MONTH", "100")
+	cases := []struct{ key, value string }{
+		{"YDB_CONNECTION_STRING", "not-url"},
+		{"YDB_CONNECTION_STRING", "grpc://host:2135/?database=/db"},
+		{"YDB_CONNECTION_STRING", "grpcs://user:PRIVATE@host:2135/?database=/db"},
+		{"YDB_CONNECTION_STRING", "grpcs://host:2135/path?database=/db"},
+		{"YDB_CONNECTION_STRING", "grpcs://host:2135/?database="},
+		{"YDB_CONNECTION_STRING", "grpcs://host:2135/?database=///"},
+		{"YDB_CONNECTION_STRING", "grpcs://host:2135/?database=db"},
+		{"YDB_CONNECTION_STRING", "grpcs://host:2135/?database=/db&token=PRIVATE"},
+		{"YDB_CONNECTION_STRING", "grpcs://host:2135/?database=/db&database=/other"},
+		{"YDB_CONNECTION_STRING", "grpcs://host:2135/?database=/db#PRIVATE"},
+		{"YDB_CONNECTION_STRING", "grpcs://host:2135/?database=/db,OTHER=value"},
+		{"YDB_CONNECTION_STRING", "grpcs://host/?database=/db"},
+		{"YDB_CONNECTION_STRING", "grpcs://host:0/?database=/db"},
+		{"YDB_CONNECTION_STRING", "grpcs://host:65536/?database=/db"},
+		{"YDB_CONNECTION_STRING", "grpcs://host:2135/?database=/" + strings.Repeat("x", 1024)},
+		{"YDB_BUDGET_KEY", "bad/key"}, {"YDB_BUDGET_KEY", "bad key"},
+		{"YDB_BUDGET_KEY", "bad,key=value"}, {"YDB_BUDGET_KEY", strings.Repeat("x", 129)},
+		{"SHARED_ANALYSES_PER_HOUR", "0"}, {"SHARED_ANALYSES_PER_HOUR", "1000001"},
+		{"SHARED_ANALYSES_PER_MONTH", "0"}, {"SHARED_ANALYSES_PER_MONTH", "-1"},
+		{"SHARED_ANALYSES_PER_MONTH", "1000001"}, {"SHARED_ANALYSES_PER_MONTH", "NaN"},
+		{"REDIS_BUDGET_URL", "rediss://user:PRIVATE@host:6379"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.key+"="+tc.value, func(t *testing.T) {
+			t.Setenv(tc.key, tc.value)
+			_, err := Load()
+			if err == nil {
+				t.Fatal("accepted invalid YDB configuration")
+			}
+			if !strings.Contains(err.Error(), "YDB") || strings.Contains(err.Error(), "PRIVATE") {
+				t.Fatalf("unsafe/unrelated error: %v", err)
+			}
+		})
+	}
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.YDBBudgetKey = ""
+	if cfg.Validate() == nil {
+		t.Fatal("empty key accepted by Validate")
+	}
+	cfg.YDBBudgetKey = strings.Repeat("a", 128)
+	cfg.SharedAnalysesPerHour = 1000000
+	cfg.SharedAnalysesPerMonth = 1000000
+	if err = cfg.Validate(); err != nil {
+		t.Fatalf("valid upper bounds rejected: %v", err)
+	}
+}

@@ -280,7 +280,12 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 		attempts++
 		s.logger.Info("provider_attempt", "request_id", requestIDFrom(r), "attempt", attempts, "provider", info.Provider, "status", info.HTTPStatus, "outcome", info.Outcome, "duration_ms", info.Duration.Milliseconds(), "usage_available", info.UsageAvailable, "input_tokens", info.InputTokens, "output_tokens", info.OutputTokens, "total_tokens", info.TotalTokens)
 	})
-	features, err := s.vision.Analyze(ctx, sanitized.JPEG)
+	providerJPEG, err := imageproc.ForProvider(sanitized)
+	if err != nil {
+		complete(analysisOutcome{internalError: true})
+		return
+	}
+	features, err := s.vision.Analyze(ctx, providerJPEG)
 	if providerRetryAfter > 0 && errors.Is(err, vision.ErrRateLimited) {
 		complete(analysisOutcome{rateLimited: true, retryAfter: providerRetryAfter})
 		return

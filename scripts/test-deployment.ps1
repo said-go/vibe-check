@@ -23,6 +23,20 @@ Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -RedisSecretVersionId v
 Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -SharedAnalysesPerHour 7 } 'require Redis secret'
 Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -RedisSecretId redis123 -RedisSecretVersionId version456 -RedisBudgetKey 'bad,key=value' } 'Invalid Redis budget'
 Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -RedisSecretId redis123 -RedisSecretVersionId version456 -SharedAnalysesPerHour 0 } 'Invalid Redis budget'
+$dsn='grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/folder123/database123'
+foreach ($invalidDSN in @('', 'grpc://host:2135/?database=/db', 'grpcs://user:pass@host:2135/?database=/db', 'grpcs://host:2135/?database=', 'grpcs://host:2135/?database=/', 'grpcs://host:0/?database=/db', 'grpcs://host:65536/?database=/db', 'grpcs://host:2135/other?database=/db', 'grpcs://host:2135/?database=/db&token=secret', 'grpcs://host:2135/?database=/db#fragment', 'grpcs://host:2135/?database=/db,OTHER=value')) {
+    Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -YDBConnectionString $invalidDSN } 'Invalid YDBConnectionString'
+}
+Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -YDBBudgetKey key } 'require YDBConnectionString'
+Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -SharedAnalysesPerMonth 100 } 'require YDBConnectionString'
+Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -YDBConnectionString $dsn -RedisSecretId redis123 } 'mutually exclusive'
+Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -YDBConnectionString $dsn -RedisBudgetKey key } 'mutually exclusive'
+Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -YDBConnectionString $dsn -SharedAnalysesPerMonth 0 } 'Invalid YDB budget'
+Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -YDBConnectionString $dsn -SharedAnalysesPerHour 0 } 'Invalid YDB budget'
+Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -YDBConnectionString $dsn -YDBBudgetKey 'bad,key=value' } 'Invalid YDB budget'
+& "$PSScriptRoot/deploy-yandex.ps1" @ids -YDBConnectionString $dsn
+if ($global:deployTestMutations -ne 0) { throw 'YDB plan/validation invoked cloud tools.' }
+$global:deployTestCount++
 foreach ($invalidImage in @('', 'latest', ('a'*40), 'cr.yandex/other/vibe-check:latest', ('sha256:' + ('A'*64)), ('sha256:' + ('a'*64) + ';bad'))) {
     Assert-Throws { & "$PSScriptRoot/deploy-yandex.ps1" @ids -ImageDigest $invalidImage } 'immutable sha256'
 }
@@ -72,6 +86,22 @@ try {
     if ($argv[[array]::IndexOf($argv,'--image')+1] -cne "cr.yandex/registry123/vibe-check@$digest") { throw 'Rollback digest changed' }
     if (@($argv | Where-Object { $_ -eq '--secret' }).Count -ne 2) { throw 'Rollback dropped configured secrets' }
     $global:deployTestCount++
+    foreach ($reuseYDBImage in @($false, $true)) {
+        $global:deployTestCommands = New-Object 'System.Collections.Generic.List[object]'
+        $options=$ids.Clone()
+        $options.YDBConnectionString=$dsn
+        if ($reuseYDBImage) { $options.ImageDigest=$digest; $options.YDBBudgetKey='rollback-budget'; $options.SharedAnalysesPerHour=5; $options.SharedAnalysesPerMonth=50 }
+        & (Join-Path $fixtureScripts 'deploy-yandex.ps1') @options -Apply
+        $expectedCount=if($reuseYDBImage){2}else{5}
+        if ($global:deployTestCommands.Count -ne $expectedCount) { throw 'Unexpected YDB deploy/rollback command count' }
+        $argv=$global:deployTestCommands[$expectedCount-1].Arguments
+        $environmentArg=$argv[[array]::IndexOf($argv,'--environment')+1]
+        $budgetTail=if($reuseYDBImage){'YDB_BUDGET_KEY=rollback-budget,SHARED_ANALYSES_PER_HOUR=5,SHARED_ANALYSES_PER_MONTH=50'}else{'YDB_BUDGET_KEY=vibe-check-provider-budget,SHARED_ANALYSES_PER_HOUR=30,SHARED_ANALYSES_PER_MONTH=100'}
+        if (-not $environmentArg.EndsWith("YDB_CONNECTION_STRING=$dsn,$budgetTail")) { throw 'YDB environment settings lost' }
+        if (@($argv | Where-Object { $_ -eq '--secret' }).Count -ne 1 -or ($argv -join ' ') -match 'REDIS_|--network-id|--min-instances') { throw 'YDB unexpectedly adds secret, network, or warm capacity' }
+        if ($reuseYDBImage -and $argv[[array]::IndexOf($argv,'--image')+1] -cne "cr.yandex/registry123/vibe-check@$digest") { throw 'YDB rollback lost digest' }
+        $global:deployTestCount++
+    }
     $global:deployTestCommands = New-Object 'System.Collections.Generic.List[object]'
     $global:deployTestFailGet=$true
     Assert-Throws { & (Join-Path $fixtureScripts 'deploy-yandex.ps1') @ids -ImageDigest $digest -Apply } 'Target lookup failed'

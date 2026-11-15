@@ -7,12 +7,16 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
 
 type Config struct {
+	YDBConnectionString     string
+	YDBBudgetKey            string
+	SharedAnalysesPerMonth  int64
 	RedisBudgetURL          string
 	RedisBudgetKey          string
 	SharedAnalysesPerHour   int64
@@ -43,6 +47,9 @@ type Config struct {
 
 func Load() (Config, error) {
 	cfg := Config{
+		YDBConnectionString:     env("YDB_CONNECTION_STRING", ""),
+		YDBBudgetKey:            env("YDB_BUDGET_KEY", "vibe-check-provider-budget"),
+		SharedAnalysesPerMonth:  integer("SHARED_ANALYSES_PER_MONTH", 100),
 		RedisBudgetURL:          os.Getenv("REDIS_BUDGET_URL"),
 		RedisBudgetKey:          env("REDIS_BUDGET_KEY", "vibe-check:provider-budget"),
 		SharedAnalysesPerHour:   integer("SHARED_ANALYSES_PER_HOUR", 30),
@@ -90,7 +97,24 @@ func Load() (Config, error) {
 	return cfg, cfg.Validate()
 }
 
+var ydbConnectionPattern = regexp.MustCompile(`^grpcs://[a-zA-Z0-9.-]+:[0-9]{1,5}/\?database=/[a-zA-Z0-9/_-]+$`)
+var ydbBudgetKeyPattern = regexp.MustCompile(`^[a-zA-Z0-9:_-]{1,128}$`)
+
 func (c Config) Validate() error {
+	if c.YDBConnectionString != "" {
+		u, err := url.Parse(c.YDBConnectionString)
+		if err != nil || !ydbConnectionPattern.MatchString(c.YDBConnectionString) || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
+			return errors.New("invalid shared YDB connection configuration")
+		}
+		port, err := strconv.Atoi(u.Port())
+		if err != nil || port < 1 || port > 65535 {
+			return errors.New("invalid shared YDB connection configuration")
+		}
+		q, err := url.ParseQuery(u.RawQuery)
+		if err != nil || len(q) != 1 || len(q["database"]) != 1 || strings.Trim(q.Get("database"), "/") == "" || len(q.Get("database")) > 1024 || c.RedisBudgetURL != "" || !ydbBudgetKeyPattern.MatchString(c.YDBBudgetKey) || c.SharedAnalysesPerHour < 1 || c.SharedAnalysesPerHour > 1000000 || c.SharedAnalysesPerMonth < 1 || c.SharedAnalysesPerMonth > 1000000 {
+			return errors.New("invalid shared YDB budget configuration; do not combine with Redis")
+		}
+	}
 	if c.LocalDiagnostics {
 		if c.Environment != "development" {
 			return errors.New("LOCAL_DIAGNOSTICS requires development environment")

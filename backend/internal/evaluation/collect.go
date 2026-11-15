@@ -93,7 +93,11 @@ func CollectCheckpoint(ctx context.Context, m ImageManifest, base string, p visi
 		if e != nil {
 			return out, fmt.Errorf("case %d: invalid JPEG/PNG or dimensions", i+1)
 		}
-		features, e := p.Analyze(ctx, clean.JPEG)
+		providerJPEG, e := imageproc.ForProvider(clean)
+		if e != nil {
+			return out, fmt.Errorf("case %d: cannot prepare provider image", i+1)
+		}
+		features, e := p.Analyze(ctx, providerJPEG)
 		if e != nil {
 			return out, fmt.Errorf("case %d: provider failed; earlier attempts may have been billed", i+1)
 		}

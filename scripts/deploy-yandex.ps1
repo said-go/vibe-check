@@ -9,6 +9,9 @@ param(
     [string]$RedisSecretVersionId,
     [string]$RedisBudgetKey = 'vibe-check:provider-budget',
     [int]$SharedAnalysesPerHour = 30,
+    [string]$YDBConnectionString,
+    [string]$YDBBudgetKey = 'vibe-check-provider-budget',
+    [int]$SharedAnalysesPerMonth = 100,
     [string]$ImageDigest,
     [switch]$Apply
 )
@@ -19,9 +22,22 @@ $projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $reuseImage = $PSBoundParameters.ContainsKey('ImageDigest')
 if ($reuseImage -and $ImageDigest -cnotmatch '^sha256:[0-9a-f]{64}$') { throw 'ImageDigest must be an immutable sha256 digest, not a tag or image URL.' }
 
+$ydbEnabled = $PSBoundParameters.ContainsKey('YDBConnectionString')
+$redisOptions = @('RedisSecretId', 'RedisSecretVersionId', 'RedisBudgetKey') | Where-Object { $PSBoundParameters.ContainsKey($_) }
+if ($ydbEnabled -and @($redisOptions).Count -gt 0) { throw 'YDB and Redis options are mutually exclusive.' }
+if (-not $ydbEnabled -and ($PSBoundParameters.ContainsKey('YDBBudgetKey') -or $PSBoundParameters.ContainsKey('SharedAnalysesPerMonth'))) { throw 'YDB budget options require YDBConnectionString.' }
+if ($ydbEnabled) {
+    # An unambiguous nonsecret DSN; commas also delimit yc environment values.
+    $ydbUri = $null
+    if ($YDBConnectionString -cnotmatch '^grpcs://[a-zA-Z0-9.-]+:[0-9]{1,5}/\?database=/[a-zA-Z0-9/_-]+$' -or
+        -not [Uri]::TryCreate($YDBConnectionString, [UriKind]::Absolute, [ref]$ydbUri) -or
+        $ydbUri.Port -lt 1 -or $ydbUri.Port -gt 65535 -or $ydbUri.UserInfo -or $ydbUri.Fragment -or
+        $ydbUri.Query -match '^\?database=/+$') { throw 'Invalid YDBConnectionString; expected grpcs://host:port/?database=/path without credentials or extra query parameters.' }
+    if ($YDBBudgetKey -notmatch '^[a-zA-Z0-9:_-]{1,128}$' -or $SharedAnalysesPerMonth -lt 1 -or $SharedAnalysesPerMonth -gt 1000000 -or $SharedAnalysesPerHour -lt 1 -or $SharedAnalysesPerHour -gt 1000000) { throw 'Invalid YDB budget key or limit.' }
+}
 $redisEnabled = -not [string]::IsNullOrEmpty($RedisSecretId)
 if ($redisEnabled -ne (-not [string]::IsNullOrEmpty($RedisSecretVersionId))) { throw 'RedisSecretId and RedisSecretVersionId must be supplied together.' }
-if (-not $redisEnabled -and ($PSBoundParameters.ContainsKey('RedisBudgetKey') -or $PSBoundParameters.ContainsKey('SharedAnalysesPerHour'))) { throw 'Redis budget options require Redis secret IDs.' }
+if (-not $redisEnabled -and -not $ydbEnabled -and ($PSBoundParameters.ContainsKey('RedisBudgetKey') -or $PSBoundParameters.ContainsKey('SharedAnalysesPerHour'))) { throw 'Shared hourly/Redis budget options require Redis secret IDs or YDBConnectionString.' }
 if ($redisEnabled) {
     if ($RedisSecretId -notmatch '^[a-zA-Z0-9_-]{6,80}$' -or $RedisSecretVersionId -notmatch '^[a-zA-Z0-9_-]{6,80}$') { throw 'Redis secret IDs must be Yandex Cloud resource IDs.' }
     if ($RedisBudgetKey -notmatch '^[a-zA-Z0-9:_-]{1,128}$' -or $SharedAnalysesPerHour -lt 1 -or $SharedAnalysesPerHour -gt 1000000) { throw 'Invalid Redis budget key or limit.' }
@@ -51,13 +67,19 @@ $image = "cr.yandex/$RegistryId/vibe-check:$commit"
 $environment = "APP_ENV=production,AI_PROVIDER=yandex,YANDEX_FOLDER_ID=$FolderId,YANDEX_MODEL=qwen3.6-35b-a3b,FRONTEND_DIR=/app/dist,ANALYSES_PER_HOUR=30,ANALYSES_PER_CLIENT_MINUTE=3,MAX_CONCURRENT_ANALYSES=2"
 $secret = "environment-variable=YANDEX_API_KEY,id=$SecretId,version-id=$SecretVersionId,key=YANDEX_API_KEY"
 if ($redisEnabled) { $environment += ",REDIS_BUDGET_KEY=$RedisBudgetKey,SHARED_ANALYSES_PER_HOUR=$SharedAnalysesPerHour" }
+if ($ydbEnabled) { $environment += ",YDB_CONNECTION_STRING=$YDBConnectionString,YDB_BUDGET_KEY=$YDBBudgetKey,SHARED_ANALYSES_PER_HOUR=$SharedAnalysesPerHour,SHARED_ANALYSES_PER_MONTH=$SharedAnalysesPerMonth" }
 
 if (-not $reuseImage) { Write-Host "Commit: $commit" } else { Write-Host 'Existing immutable image: no build or push will run.' }
 Write-Host "Image: $image"
 Write-Host "Target container: $ContainerId in folder $FolderId"
 Write-Host 'Revision: 1 core, 1GB RAM, 180s timeout, 2 concurrent requests, 1 instance per zone.'
-Write-Host 'Secret value is read by the container from Lockbox; this script only receives resource IDs.'
+Write-Host 'Secret value is read by the container from Lockbox; no secret values are accepted by this script.'
 if ($redisEnabled) { Write-Host "Shared Redis budget: $SharedAnalysesPerHour attempts per hour; URL supplied by Lockbox." }
+if ($ydbEnabled) {
+    Write-Host "Shared YDB budget: $SharedAnalysesPerHour attempts per hour, $SharedAnalysesPerMonth per month; key: $YDBBudgetKey."
+    Write-Host 'YDB uses the revision service account through metadata; no database secret or custom network is added.'
+    Write-Host 'Attempt limits are not ruble limits; configure billing alerts and account for container/storage costs. No warm instances are requested.'
+}
 
 if (-not $Apply) {
     Write-Host 'Plan only. Pass -Apply after cloud access, Docker authentication, and billing limits are configured.'

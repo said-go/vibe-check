@@ -22,6 +22,7 @@ type collectProvider struct {
 	calls    int
 	fail     bool
 	features analysis.VisualFeatures
+	received []byte
 }
 
 type collectTransport func(*http.Request) (*http.Response, error)
@@ -49,6 +50,7 @@ func TestCollectBoundsProviderRetries(t *testing.T) {
 
 func (p *collectProvider) Analyze(ctx context.Context, b []byte) (analysis.VisualFeatures, error) {
 	p.calls++
+	p.received = b
 	if len(b) < 2 || b[0] != 255 || b[1] != 216 {
 		panic("not sanitized JPEG")
 	}

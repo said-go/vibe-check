@@ -34,6 +34,16 @@ func main() {
 	}
 	logger.Info("provider_budget_configured", "scope", "process", "calls_per_hour", cfg.AnalysesPerHour, "calls_per_client_minute", cfg.AnalysesPerClientMinute, "presets_loaded", len(presets))
 	var sharedBudget httpapi.AttemptBudget
+	if cfg.YDBConnectionString != "" {
+		budget, err := httpapi.NewYDBBudget(context.Background(), cfg.YDBConnectionString, cfg.YDBBudgetKey, int(cfg.SharedAnalysesPerHour), int(cfg.SharedAnalysesPerMonth))
+		if err != nil {
+			logger.Error("invalid_shared_ydb_budget_configuration")
+			os.Exit(1)
+		}
+		defer budget.Close()
+		sharedBudget = budget
+		logger.Info("shared_provider_budget_configured", "backend", "ydb", "calls_per_hour", cfg.SharedAnalysesPerHour, "calls_per_month", cfg.SharedAnalysesPerMonth)
+	}
 	if cfg.RedisBudgetURL != "" {
 		budget, err := httpapi.NewRedisBudget(cfg.RedisBudgetURL, cfg.RedisBudgetKey, int(cfg.SharedAnalysesPerHour))
 		if err != nil {
