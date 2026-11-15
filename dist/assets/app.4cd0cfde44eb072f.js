@@ -444,8 +444,8 @@ async function analyze() {
   let timedOut = false;
   let uploadStarted = false;
   const deadline = setTimeout(() => { timedOut = true; controller.abort(); }, 125000);
-  showStep('analyzing-step'); $('#analysis-image').src = currentImage;
   $('#analysis-status').textContent = 'Проверяем сервер анализа'; $('#progress-bar').style.width = '15%';
+  showStep('analyzing-step'); $('#analysis-image').src = currentImage;
   try {
     const ready = await analysisReady(controller.signal);
     if (generation !== requestGeneration || modal.hidden) return;

@@ -715,3 +715,23 @@ test('connection status explains offline without relying on dot color',async()=>
   b.run('navigator.onLine=true; updateConnectionStatus()');
   assert.equal(b.node('#connection-text').textContent,'наш сервер не хранит фото');
 });
+
+test('step headings expose the current explanation when focus arrives', async()=>{
+  const html=fs.readFileSync(path.join(__dirname,'../dist/index.html'),'utf8');
+  for (const [heading,description] of [['analyzing-title','analysis-status'],['error-title','error-description'],['result-title','result-status result-description result-assessment-note']]) {
+    const tag=html.match(new RegExp(`<h2\\b[^>]*id="${heading}"[^>]*>`))?.[0];
+    assert.ok(tag?.includes(`aria-describedby="${description}"`),heading);
+    for(const id of description.split(' ')) assert.ok(html.includes(`id="${id}"`),id);
+  }
+  const b=await browser();b.prepare();
+  b.node('#analysis-status').textContent='Старый этап предыдущего запроса';
+  let spokenAnalysis,spokenError;
+  b.node('#analyzing-step h2').focus=()=>{spokenAnalysis=b.node('#analysis-status').textContent;};
+  b.node('#error-step h2').focus=()=>{spokenError=b.node('#error-description').textContent;};
+  b.setFetch(async()=>response({status:'unavailable'},503));
+  await b.run('analyze()');
+  assert.equal(spokenAnalysis,'Проверяем сервер анализа');
+  assert.ok(spokenError?.length>0);
+  b.run("showError('Интернет пропал. Фото не отправлено.',true)");
+  assert.equal(spokenError,'Интернет пропал. Фото не отправлено.');
+});

@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Unbounded:wght@600;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="assets/styles.4b38bba52d38096a.css" />
+  <link rel="stylesheet" href="assets/styles.e9e5965ab5805a67.css" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Перейти к содержимому</a>
@@ -127,19 +127,19 @@
 
       <div class="analyzing-step" id="analyzing-step" hidden>
         <div class="analysis-preview"><img id="analysis-image" alt="Ваше фото" /><div class="analysis-grid"></div><div class="laser"></div></div>
-        <h2 id="analyzing-title" tabindex="-1">СЧИТЫВАЕМ ВАЙБ...</h2><p id="analysis-status" role="status">Отправляем фото на анализ</p>
+        <h2 id="analyzing-title" tabindex="-1" aria-describedby="analysis-status">СЧИТЫВАЕМ ВАЙБ...</h2><p id="analysis-status" role="status">Отправляем фото на анализ</p>
         <div class="progress"><span id="progress-bar"></span></div>
       </div>
 
       <div class="error-step" id="error-step" hidden>
-        <p class="eyebrow">анализ не завершён</p><h2 id="error-title" tabindex="-1">ПОПРОБУЕМ ЕЩЁ?</h2>
+        <p class="eyebrow">анализ не завершён</p><h2 id="error-title" tabindex="-1" aria-describedby="error-description">ПОПРОБУЕМ ЕЩЁ?</h2>
         <p id="error-description" role="alert"></p>
         <div class="modal-actions"><button class="btn btn-primary" id="retry-analysis">Повторить</button><button class="btn btn-ghost" id="error-choose-again">Другое фото</button></div>
       </div>
 
       <div class="result-step" id="result-step" hidden>
         <div class="result-photo"><img id="result-image" alt="Ваше фото" /><div class="result-badge" id="result-score">—</div></div>
-        <div class="result-copy"><p class="eyebrow" id="result-status">вердикт готов</p><h2 id="result-title" tabindex="-1"></h2><p class="result-level" id="result-level"></p><p id="result-description"></p>
+        <div class="result-copy"><p class="eyebrow" id="result-status">вердикт готов</p><h2 id="result-title" tabindex="-1" aria-describedby="result-status result-description result-assessment-note"></h2><p class="result-level" id="result-level"></p><p id="result-description"></p>
           <p class="assessment-note" id="result-assessment-note" hidden></p>
           <section class="result-explanation" id="result-explanation" hidden aria-labelledby="result-why-title"><h3 id="result-why-title">Почему так?</h3><ul id="result-reasons"></ul></section>
           <div class="stat-list" id="result-stats"><div><span>КАК СОЧЕТАЕТСЯ</span><b id="style-stat">—</b></div><div><span>НАСКОЛЬКО НЕОБЫЧНО</span><b id="energy-stat">—</b></div><div><span>ЦВЕТА</span><b id="aura-stat">—</b></div></div>
@@ -160,6 +160,6 @@
   <footer><span>ВАЙБЧЕК © 2026</span><span>НЕ ВОСПРИНИМАЙ ВСЕРЬЁЗ · ТЫ УЖЕ ХОРОШ</span></footer>
   <script src="assets/history.605262dea8c7e7b9.js"></script>
   <script src="assets/share-card.92d96a7f6a56c0ce.js"></script>
-  <script src="assets/app.00f9188ba2bf13c1.js"></script>
+  <script src="assets/app.4cd0cfde44eb072f.js"></script>
 </body>
 </html>
