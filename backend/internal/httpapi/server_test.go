@@ -312,6 +312,7 @@ func TestAnalyzeRejectsUnexpectedMultipartField(t *testing.T) {
 func TestAnalyzeEnforcesBodyLimitWhileReadingImage(t *testing.T) {
 	imageBytes := append(imageFixture(t), bytes.Repeat([]byte("x"), 4096)...)
 	request := makeImageRequest(t, []string{"true"}, [][]byte{imageBytes}, "image/jpeg")
+	request.ContentLength = -1 // Streaming uploads still need the read-time cap.
 	response := httptest.NewRecorder()
 	New(slog.New(slog.NewTextHandler(io.Discard, nil)), 1024, vision.Unconfigured{}).ServeHTTP(response, request)
 	if response.Code != http.StatusRequestEntityTooLarge || !strings.Contains(response.Body.String(), "image_too_large") {

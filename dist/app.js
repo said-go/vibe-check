@@ -81,7 +81,7 @@ function openModal(withCamera = true, returnFocus = document.activeElement) {
   focusBeforeModal = returnFocus;
   if (modal.hidden) {
     overflowBeforeModal = document.body.style.overflow;
-    backgroundBeforeModal = ['header', 'main', 'footer'].map(selector => $(selector)).filter(Boolean).map(element => [element, element.inert]);
+    backgroundBeforeModal = ['.skip-link', 'header', 'main', 'footer'].map(selector => $(selector)).filter(Boolean).map(element => [element, element.inert]);
     backgroundBeforeModal.forEach(([element]) => { element.inert = true; });
   }
   cancelRequest(); clearPhoto();
@@ -580,6 +580,7 @@ function historyCard(record) {
   for (const [label, action] of [['Скачать карточку', 'download'], ['Удалить', 'delete']]) {
     const button = document.createElement('button');
     button.type = 'button'; button.textContent = label;
+    button.setAttribute('aria-label', `${label}: ${record.category}, ${date.textContent}`);
     button.dataset.action = action; button.dataset.id = record.id;
     actions.append(button);
   }
@@ -655,11 +656,13 @@ $('#history-list').addEventListener('click', async event => {
   if (!button) return;
   const record = historyRows.find(item => item.id === button.dataset.id);
   if (!record) return;
+  const hadFocus = document.activeElement === button;
   button.disabled = true;
   try {
     if (button.dataset.action === 'delete') {
       await window.VIBE_HISTORY.remove(record.id);
       await renderHistory();
+      if (hadFocus && modal.hidden && [button, document.body].includes(document.activeElement)) $('#history-title').focus();
     } else {
       window.VIBE_SHARE_CARD.download(await window.VIBE_SHARE_CARD.create(record));
       button.disabled = false;
@@ -672,9 +675,12 @@ $('#history-list').addEventListener('click', async event => {
 
 $('#clear-history').addEventListener('click', async () => {
   if (!window.confirm('Удалить все сохранённые результаты с этого устройства?')) return;
+  const button = $('#clear-history');
+  const hadFocus = document.activeElement === button;
   try {
     await window.VIBE_HISTORY.clear();
     await renderHistory();
+    if (hadFocus && modal.hidden && [button, document.body].includes(document.activeElement)) $('#history-title').focus();
   } catch { $('#history-message').textContent = 'Не удалось очистить историю.'; }
 });
 

@@ -104,6 +104,10 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, r, http.StatusUnsupportedMediaType, "unsupported_media_type", "Content-Type must be multipart/form-data", false)
 		return
 	}
+	if r.ContentLength > s.maxRequestBytes {
+		s.writeError(w, r, http.StatusRequestEntityTooLarge, "image_too_large", "Image is too large", false)
+		return
+	}
 	idempotencyValues := r.Header.Values("Idempotency-Key")
 	if len(idempotencyValues) > 1 || len(idempotencyValues) == 1 && !validIdempotencyKey(idempotencyValues[0]) {
 		s.writeError(w, r, http.StatusBadRequest, "invalid_idempotency_key", "Idempotency-Key must be 16 to 80 letters, digits, hyphens or underscores", false)
@@ -137,6 +141,9 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 	found := false
 	consented := false
 	consentSeen := false
+	// Do not close rejected parts: multipart.Part.Close drains their contents,
+	// allowing an invalid field to hold a slot while an attacker keeps uploading.
+	// Accepted parts are read to EOF; the HTTP server owns request-body cleanup.
 	for {
 		part, partErr := reader.NextPart()
 		if errors.Is(partErr, io.EOF) {
@@ -152,13 +159,11 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 		}
 		if part.FormName() == "privacy_consent" {
 			if consentSeen {
-				_ = part.Close()
 				s.writeError(w, r, http.StatusBadRequest, "duplicate_consent", "Only one privacy_consent field is allowed", false)
 				return
 			}
 			consentSeen = true
 			value, readErr := io.ReadAll(io.LimitReader(part, 17))
-			_ = part.Close()
 			if isBodyTooLarge(readErr) {
 				s.writeError(w, r, http.StatusRequestEntityTooLarge, "image_too_large", "Image is too large", false)
 				return
@@ -171,19 +176,16 @@ func (s *Server) analyzeImage(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if part.FormName() != "image" {
-			_ = part.Close()
 			s.writeError(w, r, http.StatusBadRequest, "unexpected_field", "Only image and privacy_consent fields are allowed", false)
 			return
 		}
 		if found {
-			_ = part.Close()
 			s.writeError(w, r, http.StatusBadRequest, "multiple_images", "Only one image is allowed", false)
 			return
 		}
 		found = true
 		imageType = part.Header.Get("Content-Type")
 		imageBytes, err = io.ReadAll(part)
-		_ = part.Close()
 		if err != nil {
 			if isBodyTooLarge(err) {
 				s.writeError(w, r, http.StatusRequestEntityTooLarge, "image_too_large", "Image is too large", false)

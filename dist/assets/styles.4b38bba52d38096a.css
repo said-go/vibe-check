@@ -59,3 +59,7 @@
 .result-copy,.history-card{min-width:0}
 .result-copy>p,.history-card p{overflow-wrap:anywhere}
 .history-card-top{flex-wrap:wrap}
+.skip-link{position:absolute;left:12px;top:12px;z-index:110;transform:translateY(-160%);background:var(--paper);color:var(--ink);padding:12px 16px;border:2px solid var(--ink);font-weight:800}.skip-link:focus{transform:none;outline:3px solid var(--blue);outline-offset:3px}
+.microcopy{opacity:1;color:#555}
+.modal h2{overflow-wrap:anywhere}.consent-layout>* ,.result-step>*{min-width:0}.btn{max-width:100%;overflow-wrap:anywhere}.local-diagnostics summary:focus-visible,.logo:focus-visible{outline:3px solid var(--blue);outline-offset:4px}
+@media(prefers-reduced-motion:reduce){.btn,.scale-track article,.progress span{transition:none}}

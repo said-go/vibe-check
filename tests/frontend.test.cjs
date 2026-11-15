@@ -683,3 +683,26 @@ test('keyboard focus reaches diagnostic summary before wrapping inside modal',as
   summary.focus();tab(false);assert.equal(b.active(),first);assert.equal(prevented,1);
   tab(true);assert.equal(b.active(),summary);assert.equal(prevented,2);
 });
+
+test('deleting a focused history entry restores focus to the history heading', async () => {
+  const b = await browser();
+  b.run("historyRows=[{id:'entry'}]; window.VIBE_HISTORY.remove=async()=>{};");
+  const button=b.node('delete-entry'); button.dataset={id:'entry',action:'delete'}; button.focus();
+  await b.node('#history-list').listeners.click({target:{closest:()=>button}});
+  assert.equal(b.active(),b.node('#history-title'));
+});
+
+test('history deletion does not steal focus moved during storage work', async () => {
+  const b=await browser();
+  b.run("historyRows=[{id:'entry'}]; window.VIBE_HISTORY.remove=()=>new Promise(resolve=>window.finishDelete=resolve);");
+  const button=b.node('delete-entry');button.dataset={id:'entry',action:'delete'};button.focus();
+  const pending=b.node('#history-list').listeners.click({target:{closest:()=>button}});
+  b.node('#open-file').focus();b.run('window.finishDelete()');await pending;
+  assert.equal(b.active(),b.node('#open-file'));
+});
+
+test('clearing history keeps keyboard focus in the history section', async()=>{
+  const b=await browser();b.run('window.confirm=()=>true; window.VIBE_HISTORY.clear=async()=>{};');
+  b.node('#clear-history').focus();await b.node('#clear-history').listeners.click();
+  assert.equal(b.active(),b.node('#history-title'));
+});
