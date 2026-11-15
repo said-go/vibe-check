@@ -76,12 +76,24 @@ func (e *Engine) mix(result *Result, ranked []CategoryScore, f analysis.VisualFe
 		a, b := e.explanations(first.Code, f), e.explanations(second.Code, f)
 		result.Explanations = nil
 		if len(a) > 0 {
-			result.Explanations = append(result.Explanations, a[0])
+			result.Explanations = append(result.Explanations, mixedExplanation(first.Code, a))
 		}
 		if len(b) > 0 {
-			result.Explanations = append(result.Explanations, b[0])
+			result.Explanations = append(result.Explanations, mixedExplanation(second.Code, b))
 		}
 		return
+	}
+}
+
+func mixedExplanation(code string, lines []string) string {
+	// These categories require a combination of cues split across two lines.
+	// Keeping only the first would suggest that a smile or skullcap alone was
+	// sufficient, even though the actual category rule requires both details.
+	switch code {
+	case "mula", "pupsik", "cool_pose":
+		return strings.Join(lines, " ")
+	default:
+		return lines[0]
 	}
 }
 

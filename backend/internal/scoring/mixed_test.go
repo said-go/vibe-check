@@ -4,7 +4,56 @@ import (
 	"github.com/said-go/vibe-check/backend/internal/analysis"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
+
+func TestMixedReportsKeepEveryRequiredPortraitCue(t *testing.T) {
+	for _, tc := range []struct {
+		code         string
+		setup        func(*analysis.VisualFeatures)
+		promoteOther func(*analysis.VisualFeatures)
+		cues         []string
+	}{
+		{"mula", func(f *analysis.VisualFeatures) { f.SkullcapVisible, f.BeardVisible = true, true },
+			func(f *analysis.VisualFeatures) { f.PlayfulGrimace = true }, []string{"тюбетейка", "борода"}},
+		{"cool_pose", func(f *analysis.VisualFeatures) { f.SeriousIndexPose = true },
+			func(f *analysis.VisualFeatures) { f.SkullcapVisible, f.BeardVisible = true, true }, []string{"палец", "Серьёзное"}},
+		{"pupsik", func(f *analysis.VisualFeatures) { f.GentleSmile, f.RelaxedHeadTilt = true, true },
+			func(f *analysis.VisualFeatures) {
+				f.ShortHairOrBaldVisible, f.BeardVisible, f.HeadScarVisible = true, true, true
+			}, []string{"улыбка", "наклонена", "брови"}},
+	} {
+		for _, secondary := range []bool{false, true} {
+			t.Run(tc.code+map[bool]string{false: "/primary", true: "/secondary"}[secondary], func(t *testing.T) {
+				f := baseFeatures()
+				f.OutfitVisibility, f.MuscularVisible = 0, true
+				tc.setup(&f)
+				if secondary {
+					tc.promoteOther(&f)
+				}
+				r, err := NewEngine().Evaluate(f)
+				if err != nil {
+					t.Fatal(err)
+				}
+				index := 0
+				if secondary {
+					index = 1
+				}
+				if len(r.Components) != 2 || r.Components[index].Code != tc.code || len(r.Explanations) != 2 {
+					t.Fatalf("unexpected blend: %+v", r)
+				}
+				for _, cue := range tc.cues {
+					if !strings.Contains(r.Explanations[index], cue) {
+						t.Fatalf("missing %q in %q", cue, r.Explanations[index])
+					}
+				}
+				if utf8.RuneCountInString(r.Explanations[index]) > 300 {
+					t.Fatal("explanation will be truncated by history normalizer")
+				}
+			})
+		}
+	}
+}
 
 func TestAlternativeCombinationNeedsVisibleAbsenceAndNonMuscularBuild(t *testing.T) {
 	base := analysis.VisualFeatures{ContractVersion: analysis.ContractVersion, PersonCount: 1, Confidence: 90, ImageQuality: 90, OutfitVisibility: 80, HairBelowEars: true}

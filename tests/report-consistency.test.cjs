@@ -53,3 +53,22 @@ test('portrait reports and share records consistently hide clothing ratings', ()
   assert.equal(record.assessmentScope, 'portrait');
   assert.equal(node('#result-assessment-note').textContent, record.assessmentNote);
 });
+
+test('mixed report preserves both category names and required cues without using category confidence as clothing score', () => {
+  const title = 'Типо крутой-герой боевика';
+  const explanations = [
+    'Поднят указательный палец. Серьёзное выражение лица дополняет позу.',
+    'Короткая стрижка или лысина, борода и видимый шрам на голове или лице — сочетание для шуточного кинообраза.'
+  ];
+  const { node, record } = render({
+    primary_category: { title, score: 100 }, secondary_category: { title: 'Герой боевика', score: 100 },
+    score: 46, metrics: { coherence: 50, originality: 25, color_harmony: 60 },
+    summary: 'Два вайба в одном кадре. Одному названию тут явно тесно.', explanations
+  });
+  assert.equal(node('#result-title').textContent, title);
+  assert.equal(record.category, title);
+  assert.equal(node('#result-level').textContent, 'Оценка одежды: 46/100');
+  assert.equal(record.score, 46);
+  assert.deepEqual(node('#result-reasons').children.map(item => item.textContent), explanations);
+  assert.deepEqual(Array.from(record.explanations), explanations);
+});

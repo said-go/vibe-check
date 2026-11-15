@@ -835,3 +835,109 @@ test('cancelled upload cannot replace a newer photo result or release its reques
   assert.equal(b.run('activeRequest'),null);
   assert.equal(b.timers.size,0);
 });
+
+test('returning to a tab refreshes history deleted elsewhere without stealing report focus', async()=>{
+  for (const trigger of ['focus','visibilitychange']) {
+    const b=await browser();
+    b.run("window.VIBE_HISTORY.list=async()=>[{id:'old',category:'Спортик',createdAt:1000,score:70}]");
+    await b.run('renderHistory()');
+    b.run('window.VIBE_HISTORY.list=async()=>[]; document.hidden=false');
+    if(trigger==='focus') b.events.get('focus')(); else b.docEvents.get('visibilitychange')();
+    await flush();
+    assert.equal(b.node('#history-list').children.length,0);
+    assert.equal(b.node('#history-message').textContent,'История пока пуста.');
+    assert.equal(b.node('#clear-history').hidden,true);
+    assert.equal(b.calls().filter(([,opts])=>opts?.method==='POST').length,0);
+  }
+});
+
+test('background history refresh preserves unchanged nodes and skips hidden tabs',async()=>{
+  const b=await browser();
+  b.run("window.VIBE_HISTORY.list=async()=>[{id:'old',category:'Спортик',createdAt:1000,score:70}]");
+  await b.run('renderHistory()');
+  const card=b.node('#history-list').children[0];
+  b.events.get('focus')();await flush();
+  assert.equal(b.node('#history-list').children[0],card);
+  b.run('window.VIBE_HISTORY.list=async()=>[]; document.hidden=true');
+  b.docEvents.get('visibilitychange')();await flush();
+  assert.equal(b.node('#history-list').children[0],card);
+});
+
+test('background history recovers an empty store after a read failure',async()=>{
+  const b=await browser();
+  b.run("window.VIBE_HISTORY.list=async()=>{throw Error('storage_unavailable')}");
+  await b.run('renderHistory()');
+  b.run('window.VIBE_HISTORY.list=async()=>[]');
+  b.events.get('focus')();await flush();
+  assert.equal(b.node('#history-message').textContent,'История пока пуста.');
+});
+
+test('background removal restores history focus but leaves an open report focused',async()=>{
+  for(const reportOpen of [false,true]) {
+    const b=await browser();
+    b.run("window.VIBE_HISTORY.list=async()=>[{id:'old',category:'Спортик',createdAt:1000,score:70}]");
+    await b.run('renderHistory()');
+    const button=b.node(reportOpen?'#result-step h2':'#clear-history');button.focus();
+    b.node('#camera-modal').hidden=!reportOpen;
+    b.run('window.VIBE_HISTORY.list=async()=>[]');
+    b.events.get('focus')();await flush();
+    assert.equal(b.active(),reportOpen?button:b.node('#history-title'));
+  }
+});
+
+test('deadline covers a stalled response body and retains the manual retry key',async()=>{
+  const b=await browser();b.prepare();
+  b.setFetch(async(url,opts)=>url.includes('readyz')?response({status:'ready'}):{
+    ok:true, json:()=>new Promise((resolve,reject)=>opts.signal.addEventListener('abort',()=>reject(new DOMException('aborted','AbortError'))))
+  });
+  const pending=b.run('analyze()');await flush();
+  await b.run('analyze()');
+  assert.equal(b.calls().filter(([,opts])=>opts?.method==='POST').length,1);
+  [...b.timers.values()].find(t=>t.ms===125000).fn();await pending;
+  assert.match(b.node('#error-description').textContent,/слишком много времени/);
+  assert.equal(b.run('activeRequest'),null);
+  assert.equal(b.run('analysisKey'),'same-photo-key-123');
+  assert.equal(b.timers.size,0);
+});
+
+test('closing while reading the response body ignores its late completed verdict',async()=>{
+  const b=await browser();b.prepare();let resolveBody;
+  b.setFetch(async url=>url.includes('readyz')?response({status:'ready'}):{ok:true,json:()=>new Promise(resolve=>{resolveBody=resolve;})});
+  const pending=b.run('analyze()');await flush();b.run('closeModal()');
+  resolveBody({status:'completed',analysis_id:'late',result:{score:70,primary_category:{title:'Стиляга'},summary:'Late',metrics:{coherence:70,originality:70,color_harmony:70}}});
+  await pending;
+  assert.equal(b.run('currentRecord'),null);
+  assert.equal(b.node('#camera-modal').hidden,true);
+  assert.equal(b.node('#error-description').textContent,'');
+  assert.equal(b.timers.size,0);
+});
+
+test('offline upload failure never resends on reconnect or while retrying offline',async()=>{
+  const b=await browser();b.prepare();let rejectUpload;
+  b.setFetch(async url=>url.includes('readyz')?response({status:'ready'}):new Promise((resolve,reject)=>{rejectUpload=reject;}));
+  const pending=b.run('analyze()');await flush();
+  b.run('navigator.onLine=false');await b.events.get('offline')();
+  rejectUpload(new TypeError('connection lost'));await pending;
+  await b.run('analyze()');
+  assert.equal(b.calls().filter(([,opts])=>opts?.method==='POST').length,1);
+  assert.equal(b.run('analysisKey'),'same-photo-key-123');
+  assert.equal(b.run('activeRequest'),null);
+  b.run('navigator.onLine=true');await b.events.get('online')();
+  assert.equal(b.calls().filter(([,opts])=>opts?.method==='POST').length,1);
+});
+
+test('background history read failure restores focus only from removed history controls',async()=>{
+  for(const focused of ['entry','clear','elsewhere']) {
+    const b=await browser();
+    b.run("window.VIBE_HISTORY.list=async()=>[{id:'old',category:'Спортик',createdAt:1000,score:70}]");
+    await b.run('renderHistory()');
+    const button=b.node(focused==='clear'?'#clear-history':focused==='entry'?'history-entry-button':'#open-camera');
+    b.node('#history-list').contains=element=>focused==='entry'&&element===button;
+    button.focus();
+    b.run("window.VIBE_HISTORY.list=async()=>{throw Error('storage_unavailable')}");
+    b.events.get('focus')();await flush();
+    assert.equal(b.active(),focused==='elsewhere'?button:b.node('#history-title'));
+    assert.equal(b.node('#history-list').children.length,0);
+    assert.match(b.node('#history-message').textContent,/недоступна/);
+  }
+});

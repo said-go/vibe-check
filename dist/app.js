@@ -11,6 +11,7 @@ let analysisKey = '';
 let currentRecord = null;
 let currentCardBlob = null;
 let historyRows = [];
+let historyAvailable = false;
 let historyGeneration = 0;
 let activeRequest = null;
 let requestGeneration = 0;
@@ -589,24 +590,33 @@ function historyCard(record) {
   return card;
 }
 
-async function renderHistory() {
+async function renderHistory(backgroundRefresh = false) {
   const generation = ++historyGeneration;
   const list = $('#history-list');
   const message = $('#history-message');
   try {
     const rows = await window.VIBE_HISTORY.list();
     if (generation !== historyGeneration) return false;
+    if (backgroundRefresh && historyAvailable && JSON.stringify(rows) === JSON.stringify(historyRows)) return true;
+    historyAvailable = true;
+    const active = document.activeElement;
+    const restoreFocus = backgroundRefresh && modal.hidden && (list.contains?.(active) || (active === $('#clear-history') && rows.length === 0));
     historyRows = rows;
     list.replaceChildren(...historyRows.map(historyCard));
     $('#clear-history').hidden = historyRows.length === 0;
     message.textContent = historyRows.length ? `Сохранено результатов: ${historyRows.length}. Фото не сохраняются.` : 'История пока пуста.';
+    if (restoreFocus) $('#history-title').focus();
     return true;
   } catch {
     if (generation !== historyGeneration) return false;
+    historyAvailable = false;
+    const active = document.activeElement;
+    const restoreFocus = backgroundRefresh && modal.hidden && (list.contains?.(active) || active === $('#clear-history'));
     historyRows = [];
     list.replaceChildren();
     $('#clear-history').hidden = true;
     message.textContent = 'Локальная история недоступна в этом браузере.';
+    if (restoreFocus) $('#history-title').focus();
     return false;
   }
 }
@@ -749,7 +759,8 @@ window.addEventListener('online', updateConnectionStatus);
 window.addEventListener('offline', updateConnectionStatus);
 window.addEventListener('online', refreshAvailability);
 window.addEventListener('offline', refreshAvailability);
-window.addEventListener('focus', refreshAvailability);
+window.addEventListener('focus', () => { refreshAvailability(); renderHistory(true); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) renderHistory(true); });
 updateConnectionStatus();
 refreshAvailability();
 

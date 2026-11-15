@@ -4,8 +4,8 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const result = { score: 75, level_title: 'Стиляга', primary_category: { title: 'Спорт-шик' }, summary: 'Всё хорошо', metrics: { coherence: 80, originality: 70, color_harmony: 75 }, recommendations: ['Один акцент'], photo: 'SECRET_IMAGE' };
-function history({ unavailable = false, fail = false, blocked = false, rows = [] } = {}) {
-  const data = new Map(rows.map(row => [row.id, row]));
+function history({ unavailable = false, fail = false, blocked = false, rows = [], sharedData } = {}) {
+  const data = sharedData || new Map(rows.map(row => [row.id, row]));
   let closed = 0;
   const db = { close() { closed++; }, transaction() {
     const tx = { objectStore() { return {
@@ -66,9 +66,32 @@ test('malformed stored rows cannot break listing or return stored photo fields',
   const rows = await h.api.list(); assert.equal(rows.length, 1); assert.equal(rows[0].id, 'valid');
   assert.ok(!JSON.stringify(rows).includes('SECRET_IMAGE'));
 });
+
+test('damaged rows cannot consume the retention limit and discard a newly saved report', async () => {
+  const rows = Array.from({ length: 50 }, (_, i) => ({ id: `damaged-${i}`, createdAt: 1e20, category: 'Стиляга', metrics: {} }));
+  const h = history({ rows });
+  await h.api.save('new-report', result);
+  const saved = await h.api.list();
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].id, 'new-report');
+  assert.equal(h.data.size, 1, 'invalid dated rows must be removed before applying the limit');
+});
 test('concurrent saves retain at most fifty records', async () => {
   const h = history(); await Promise.all(Array.from({ length: 70 }, (_, i) => h.api.save(String(i), result)));
   assert.equal(h.data.size, 50); assert.equal((await h.api.list()).length, 50);
+});
+
+test('independent history clients observe deletions and repeated removal is harmless', async () => {
+  const a = history();
+  const b = history({ sharedData: a.data });
+  await a.api.save('shared-report', result);
+  assert.equal((await b.api.list()).length, 1);
+  await Promise.all([a.api.remove('shared-report'), b.api.remove('shared-report')]);
+  assert.equal((await a.api.list()).length, 0);
+  assert.equal((await b.api.list()).length, 0);
+  await b.api.save('next-report', result);
+  await a.api.clear();
+  assert.equal((await b.api.list()).length, 0);
 });
 test('storage unavailable and quota errors reject; aborted transactions close the database', async () => {
   await assert.rejects(history({ unavailable: true }).api.list(), /storage_unavailable/);
