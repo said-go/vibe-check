@@ -21,10 +21,17 @@ for (const version of ['v1', 'v2']) {
   const cssName = `assets/styles.${hash(css)}.css`;
   fs.writeFileSync(path.join(root, cssName), css);
   const html = text(path.join(source, 'index.html'))
+    .replace(/<title>.*?<\/title>/, '<title>ТЕСТ ВАЙБЧЕК — без AI</title>')
+    .replace(/(<a class="logo"[^>]*>).*?(<\/a>)/, '$1ТЕСТ ВАЙБЧЕК$2')
     .replace(/assets\/styles\.[a-f0-9]{16}\.css/g, cssName)
-    .replace('<body>', `<body><p id="qa-release">LOCAL PWA QA ${version.toUpperCase()} — synthetic, no AI</p>`)
+    .replace('<body>', `<body><p id="qa-release" style="padding:16px;margin:0;background:#fff0d0;color:#111;border:4px solid #d65000;font:bold 16px Arial">ТЕСТ ВАЙБЧЕК ${version.toUpperCase()} — БЕЗ AI. Любое фото даёт «Спортик». Это проверка интерфейса, не анализ фотографии.</p>`)
     .replace('</body>', `${memoryPanel ? '<script src="/__qa/memory.js"></script>' : ''}</body>`);
   fs.writeFileSync(path.join(root, 'index.html'), html);
+  const manifest = JSON.parse(text(path.join(source, 'manifest.webmanifest')));
+  manifest.name = 'ТЕСТ ВАЙБЧЕК — без AI';
+  manifest.short_name = 'ТЕСТ ВАЙБЧЕК';
+  manifest.description = 'Тест интерфейса: любое фото даёт фиксированный ответ «Спортик». AI не используется.';
+  fs.writeFileSync(path.join(root, 'manifest.webmanifest'), JSON.stringify(manifest, null, 2));
   const worker = text(path.join(source, 'sw.js'))
     .replace(/const CACHE_NAME = .*?;/, `const CACHE_NAME = 'vibe-check-qa-${hash(html)}';`)
     .replace(/\/assets\/styles\.[a-f0-9]{16}\.css/g, `/${cssName}`);

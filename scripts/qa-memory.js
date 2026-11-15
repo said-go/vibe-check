@@ -18,7 +18,7 @@
   const table = document.createElement('table');
   table.style.cssText = 'border-collapse:collapse;text-align:left';
   const caption = document.createElement('caption');
-  caption.textContent = 'Ручные замеры (MiB), максимум 20 строк';
+  caption.textContent = 'Ручные замеры (MiB), максимум 100 строк';
   const head = document.createElement('thead');
   const headerRow = document.createElement('tr');
   for (const label of ['Замер', 'С начала, с', 'Используется', 'Выделено']) {
@@ -49,7 +49,7 @@
       row.append(cell);
     }
     body.append(row);
-    if (body.children.length > 20) body.firstElementChild.remove();
+    if (body.children.length > 100) body.firstElementChild.remove();
     message.textContent = `Замер ${samples}: используется ${values[2]} MiB, выделено ${values[3]} MiB.`;
   });
   panel.append(heading, explanation, button, message, table);
