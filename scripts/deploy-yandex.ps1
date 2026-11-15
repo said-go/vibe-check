@@ -73,7 +73,7 @@ $gitStatus = & git -C $projectRoot status --porcelain
 if ($LASTEXITCODE -ne 0) { throw 'Cannot check working tree.' }
 if ($gitStatus.Length -gt 0) { throw 'Working tree must be clean for -Apply.' }
 
-Invoke-BoundedCommand docker @('info', '--format', '{{.Server.Version}}') 15 | Out-Null
+Invoke-BoundedCommand docker @('info', '--format', '{{.ServerVersion}}') 15 | Out-Null
 }
 Invoke-BoundedCommand yc @('serverless', 'container', 'get', '--id', $ContainerId, '--folder-id', $FolderId, '--format', 'json') 60 | Out-Null
 if (-not $reuseImage) {

@@ -50,6 +50,7 @@ try {
         if($withRedis) { $options.RedisSecretId='redis123'; $options.RedisSecretVersionId='version456'; $options.RedisBudgetKey='test:budget'; $options.SharedAnalysesPerHour=7 }
         & (Join-Path $fixtureScripts 'deploy-yandex.ps1') @options -Apply
         if($global:deployTestCommands.Count -ne 5){throw 'Unexpected deploy command count'}
+        if (($global:deployTestCommands[0].Arguments -join ' ') -ne 'info --format {{.ServerVersion}}') { throw 'Docker readiness probe must use the docker info ServerVersion field' }
         $revision=$global:deployTestCommands[4]
         $argv=$revision.Arguments
         if($revision.Tool -ne 'yc' -or ($argv[0..3] -join ' ') -ne 'serverless container revision deploy'){throw 'Wrong deploy command'}
@@ -129,5 +130,16 @@ $output = Invoke-BoundedCommand $shell @('-NoProfile','-Command','Write-Output '
 if($output.Trim() -ne 'bounded ok'){throw 'Command output mismatch'}
 $global:deployTestCount++
 Assert-Throws { Invoke-BoundedCommand $shell @('-NoProfile','-Command','exit 7') 10 } 'exit code 7'
+& {
+    # Simulate Docker Desktop exposing both a Windows executable and a shell shim.
+    function Get-Command {
+        param($Name, $CommandType, $ErrorAction)
+        [pscustomobject]@{Source=$shell}
+        [pscustomobject]@{Source=($shell + '.nonexistent-shim')}
+    }
+    $output = Invoke-BoundedCommand 'duplicate-tool' @('-NoProfile','-Command','Write-Output ''first match ok''') 10
+    if ($output.Trim() -ne 'first match ok') { throw 'Multiple executable matches were not resolved in PATH order' }
+}
+$global:deployTestCount++
 Assert-Throws { Invoke-BoundedCommand $shell @('-NoProfile','-Command','Start-Sleep -Seconds 15') 1 } 'deadline'
 Write-Host "Deployment regression checks passed: $global:deployTestCount. No cloud calls or photo uploads."

@@ -22,8 +22,8 @@ function Run-Checked([string]$Executable, [string[]]$Arguments) {
 
 function Test-DockerDaemon {
     $probe = New-Object System.Diagnostics.Process
-    $probe.StartInfo.FileName = (Get-Command docker).Source
-    $probe.StartInfo.Arguments = 'info --format {{.Server.Version}}'
+    $probe.StartInfo.FileName = (Get-Command docker -CommandType Application | Select-Object -First 1).Source
+    $probe.StartInfo.Arguments = 'info --format {{.ServerVersion}}'
     $probe.StartInfo.UseShellExecute = $false
     $probe.StartInfo.CreateNoWindow = $true
     $probe.StartInfo.RedirectStandardOutput = $true

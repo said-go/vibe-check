@@ -1,6 +1,8 @@
 function Invoke-BoundedCommand {
     param([string]$Executable, [string[]]$Arguments, [int]$TimeoutSeconds = 60, [string]$WorkingDirectory = (Get-Location).Path)
-    $command = Get-Command $Executable -CommandType Application -ErrorAction Stop
+    # Docker Desktop can expose both docker.exe and an extensionless docker.
+    # Use the first PATH match rather than concatenating multiple source paths.
+    $command = Get-Command $Executable -CommandType Application -ErrorAction Stop | Select-Object -First 1
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo.FileName = $command.Source
     $process.StartInfo.WorkingDirectory = $WorkingDirectory
