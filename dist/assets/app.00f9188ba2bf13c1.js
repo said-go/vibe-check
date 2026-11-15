@@ -738,6 +738,7 @@ function updateConnectionStatus() {
   const indicator = $('#connection-status');
   indicator.classList.toggle('offline', !navigator.onLine);
   indicator.setAttribute('aria-label', navigator.onLine ? 'Наш сервер не сохраняет фото' : 'Нет подключения к сети');
+  $('#connection-text').textContent = navigator.onLine ? 'наш сервер не хранит фото' : 'нет подключения к сети';
 }
 window.addEventListener('online', updateConnectionStatus);
 window.addEventListener('offline', updateConnectionStatus);

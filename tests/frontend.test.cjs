@@ -706,3 +706,12 @@ test('clearing history keeps keyboard focus in the history section', async()=>{
   b.node('#clear-history').focus();await b.node('#clear-history').listeners.click();
   assert.equal(b.active(),b.node('#history-title'));
 });
+
+test('connection status explains offline without relying on dot color',async()=>{
+  const b=await browser();
+  assert.equal(b.node('#connection-text').textContent,'наш сервер не хранит фото');
+  b.run('navigator.onLine=false; updateConnectionStatus()');
+  assert.equal(b.node('#connection-text').textContent,'нет подключения к сети');
+  b.run('navigator.onLine=true; updateConnectionStatus()');
+  assert.equal(b.node('#connection-text').textContent,'наш сервер не хранит фото');
+});

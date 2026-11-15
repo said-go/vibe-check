@@ -41,7 +41,7 @@ func NewYandex(apiKey, folderID, model, endpoint string, client *http.Client) *Y
 	}
 	return &Yandex{
 		apiKey: apiKey, folderID: folderID, model: model,
-		endpoint: strings.TrimRight(endpoint, "/"), client: client,
+		endpoint: strings.TrimRight(endpoint, "/"), client: withoutRedirects(client),
 	}
 }
 

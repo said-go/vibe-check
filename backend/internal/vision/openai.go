@@ -47,7 +47,7 @@ type OpenAI struct {
 }
 
 func NewOpenAI(apiKey, model, baseURL string, client *http.Client) *OpenAI {
-	return &OpenAI{apiKey: apiKey, model: model, baseURL: strings.TrimRight(baseURL, "/"), client: client}
+	return &OpenAI{apiKey: apiKey, model: model, baseURL: strings.TrimRight(baseURL, "/"), client: withoutRedirects(client)}
 }
 
 type inputContent struct {

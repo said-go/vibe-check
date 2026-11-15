@@ -3,10 +3,22 @@ package vision
 import (
 	"context"
 	"errors"
+	"net/http"
 	"time"
 
 	"github.com/said-go/vibe-check/backend/internal/analysis"
 )
+
+// A redirect must not replay a private image to another destination or bypass
+// the attempt budget. Copy the client so the caller's redirect policy is intact.
+func withoutRedirects(client *http.Client) *http.Client {
+	if client == nil {
+		return nil
+	}
+	copy := *client
+	copy.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return &copy
+}
 
 var (
 	ErrUnavailable     = errors.New("vision provider unavailable")
