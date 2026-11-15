@@ -221,8 +221,8 @@ const errorMessages = {
   image_dimensions_too_large: 'Фото слишком большое. Сделай или выбери другой кадр.',
   invalid_image: 'Не удалось прочитать фото. Сохрани его в JPEG или PNG и выбери файл заново.',
   image_too_large: 'Не удалось отправить фото. Выбери файл поменьше или попробуй другой кадр.',
-  rate_limited: 'Лимит анализов временно исчерпан. Подожди и повтори с этим же фото.',
-  analysis_rate_limited: 'Лимит анализов временно исчерпан. Подожди и повтори с этим же фото.',
+  rate_limited: 'Лимит анализов временно исчерпан. Менять фото из-за лимита не нужно — попробуй позже.',
+  analysis_rate_limited: 'Лимит анализов временно исчерпан. Менять фото из-за лимита не нужно — попробуй позже.',
   idempotency_conflict: 'Это уже другое фото. Выбери его заново и повтори анализ.',
   invalid_idempotency_key: 'Не удалось подготовить запрос. Выбери фото заново.',
   ai_rejected_image: 'AI не смог обработать этот кадр. Попробуй другое фото.',
@@ -236,11 +236,27 @@ const lowConfidenceMessages = {
   insufficient_style_evidence: 'Фото загрузилось, но заметных деталей для категории пока мало. Выбери другой кадр, где лучше видны одежда, аксессуары или жест. Полный рост не нужен.',
   ai_confidence_too_low: 'AI не смог уверенно разобрать детали на этом фото. Попробуй другой ракурс и ровный свет.'
 };
-function showError(message, retryable = true, retryAfter = null) {
+function retryWaitLabel(seconds) {
+  if (seconds < 60) return `${seconds} с`;
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes < 60) return `${minutes} мин`;
+  const hours = Math.floor(minutes / 60), rest = minutes % 60;
+  return `${hours} ч${rest ? ` ${rest} мин` : ''}`;
+}
+function retryDateLabel(timestamp) {
+  // Round the displayed minute up, so it never suggests retrying before the
+  // exact server deadline (which is still used for the button and request).
+  const date = new Date(Math.ceil(timestamp / 60000) * 60000);
+  // An invalid/extreme server delay still blocks retries, but must not render
+  // "Invalid Date" or a meaningless date thousands of years in the future.
+  if (!Number.isFinite(date.getTime()) || date.getFullYear() > new Date(Date.now()).getFullYear() + 1) return null;
+  return date.toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+function showError(message, retryable = true, retryAfter = null, rateLimited = false) {
   clearInterval(retryTimer);
   retryTimer = null;
   retryUntil = 0;
-  $('#error-title').textContent = 'НЕ ПОЛУЧИЛОСЬ';
+  $('#error-title').textContent = rateLimited ? 'НУЖНО ПОДОЖДАТЬ' : 'НЕ ПОЛУЧИЛОСЬ';
   $('#error-description').textContent = message;
   $('#retry-analysis').hidden = !retryable || !currentFile;
   $('#retry-analysis').disabled = false;
@@ -251,11 +267,22 @@ function showError(message, retryable = true, retryAfter = null) {
     const seconds = /^\d+$/.test(value) ? Math.min(Number(value), maxDelay) : /^[A-Za-z]{3},/.test(value) ? Math.ceil((Date.parse(value) - Date.now()) / 1000) : NaN;
     if (Number.isFinite(seconds) && seconds > 0) {
       retryUntil = Date.now() + seconds * 1000;
+      const longWait = seconds >= 86400;
+      if (longWait) {
+        const date = retryDateLabel(retryUntil);
+        $('#error-description').textContent = `${message} ${date ? `Повторить можно ${date} по времени твоего устройства.` : 'Сервер указал долгую паузу. Зайди позже.'} Если закроешь это окно, фото нужно будет выбрать снова.`;
+      }
       const tick = () => {
         const left = Math.max(0, Math.ceil((retryUntil - Date.now()) / 1000));
         $('#retry-analysis').disabled = left > 0;
-        $('#retry-analysis').textContent = left ? `Повторить через ${left} с` : 'Попробовать ещё раз';
-        if (!left) { clearInterval(retryTimer); retryTimer = null; }
+        $('#retry-analysis').textContent = left ? (longWait ? 'Повторить позже' : `Повторить через ${retryWaitLabel(left)}`) : 'Попробовать ещё раз';
+        if (!left) {
+          clearInterval(retryTimer); retryTimer = null;
+          if (rateLimited) {
+            $('#error-title').textContent = 'МОЖНО ПОВТОРИТЬ';
+            $('#error-description').textContent = 'Пауза закончилась. Нажми «Попробовать ещё раз», чтобы отправить это фото.';
+          }
+        }
       };
       tick(); retryTimer = setInterval(tick, 1000);
     }
@@ -424,7 +451,7 @@ async function analyze() {
     if (timedOut) throw new Error('analysis_timeout');
     setDiagnosticsAvailability(ready);
     if (!ready) {
-      showError('AI-анализ пока не подключён. Фото не отправлено — попробуй позже.', true);
+      showError('Сервер анализа сейчас не отвечает. Фото не отправлено — попробуй позже.', true);
       refreshAvailability();
       return;
     }
@@ -442,7 +469,7 @@ async function analyze() {
       const unavailable = [404, 502, 503, 504].includes(response.status);
       const retryable = typeof error.retryable === 'boolean' ? error.retryable : response.status === 429 || unavailable;
       const message = errorMessages[error.code] || (response.status === 429 ? errorMessages.rate_limited : unavailable ? errorMessages.ai_unavailable : retryable ? 'Не удалось завершить анализ. Попробуй ещё раз.' : 'Не удалось завершить анализ. Выбери фото заново.');
-      showError(message, retryable, response.headers.get('Retry-After'));
+      showError(message, retryable, response.headers.get('Retry-After'), response.status === 429);
       return;
     }
     if (!data || !data.result || !['completed', 'low_confidence'].includes(data.status)) throw new Error('invalid_response');

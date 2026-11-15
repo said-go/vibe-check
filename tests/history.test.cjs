@@ -50,14 +50,49 @@ test('storage unavailable and quota errors reject; aborted transactions close th
   assert.equal(h.closed(), 1); assert.equal(h.data.size, 0);
   await assert.rejects(h.api.save('one', null), /invalid_result/);
 });
-function card({ contextMissing = false, blobMissing = false } = {}) {
-  const texts = []; const textCalls = []; const calls = []; const png = { type: 'image/png' };
-  const ctx = new Proxy({ measureText: s => ({ width: s.length * 12 }), fillText: (...args) => { texts.push(args[0]); textCalls.push(args); } }, { get: (o, k) => k in o ? o[k] : () => {} });
+function card({ contextMissing = false, blobMissing = false, fontReady = Promise.resolve(), fontsAvailable = true } = {}) {
+  const texts = []; const textCalls = []; const calls = []; const fonts = []; const timers = new Map(); const png = { type: 'image/png' };
+  const ctx = new Proxy({ measureText: s => ({ width: s.length * 12 }), fillText: (...args) => { texts.push(args[0]); textCalls.push(args); } }, { get: (o, k) => k in o ? o[k] : () => {}, set: (o, k, v) => { if (k === 'font') fonts.push(v); o[k] = v; return true; } });
   const canvas = { getContext: () => contextMissing ? null : ctx, toBlob(cb, type) { calls.push(type); cb(blobMissing ? null : png); } };
-  const window = {}; const document = { fonts: { ready: Promise.resolve() }, createElement(type) { assert.equal(type, 'canvas'); return canvas; } };
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../dist/share-card.js'), 'utf8'), { window, document });
-  return { api: window.VIBE_SHARE_CARD, texts, textCalls, calls, canvas, png };
+  const window = {}; const document = { fonts: fontsAvailable ? { ready: fontReady } : undefined, createElement(type) { assert.equal(type, 'canvas'); return canvas; } };
+  let timerId = 0;
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../dist/share-card.js'), 'utf8'), { window, document, setTimeout(fn, ms) { const id = ++timerId; timers.set(id, { fn, ms }); return id; }, clearTimeout(id) { timers.delete(id); } });
+  return { api: window.VIBE_SHARE_CARD, texts, textCalls, calls, fonts, timers, canvas, png };
 }
+
+test('share card falls back to system fonts when font loading stalls', async () => {
+  let finishFonts;
+  const c = card({ fontReady: new Promise(resolve => { finishFonts = resolve; }) });
+  const pending = c.api.create(history().api.prepare('one', result));
+  assert.equal(c.calls.length, 0, 'wait briefly for intended fonts');
+  assert.equal(c.timers.size, 1);
+  const timer = [...c.timers.values()][0];
+  assert.equal(timer.ms, 1500);
+  timer.fn();
+  assert.equal(await pending, c.png);
+  assert.equal(c.timers.size, 0);
+  assert.ok(c.fonts.every(font => !/Unbounded|Manrope/.test(font)));
+  finishFonts();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(c.calls.length, 1, 'late fonts do not redraw the card');
+});
+
+test('share card survives rejected or unavailable font loading', async () => {
+  for (const options of [{ fontReady: Promise.reject(new Error('offline fonts')) }, { fontsAvailable: false }]) {
+    const c = card(options);
+    assert.equal(await c.api.create(history().api.prepare('one', result)), c.png);
+    assert.ok(c.fonts.every(font => !/Unbounded|Manrope/.test(font)));
+    assert.equal(c.timers.size, 0);
+  }
+});
+
+test('share card uses loaded fonts and clears its fallback timer', async () => {
+  const c = card();
+  await c.api.create(history().api.prepare('one', result));
+  assert.ok(c.fonts.some(font => font.includes('Unbounded')));
+  assert.ok(c.fonts.some(font => font.includes('Manrope')));
+  assert.equal(c.timers.size, 0);
+});
 
 test('share card constrains originality label to its metric box interior', async () => {
   const c = card();

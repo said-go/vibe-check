@@ -355,6 +355,51 @@ test('Retry-After blocks retries until its deadline',async()=>{
   await b.run('analyze()');assert.equal(b.node('#retry-analysis').disabled,true);
   const calls=b.calls().length;await b.run('analyze()');assert.equal(b.calls().length,calls);
   b.advance(3000);assert.equal(b.node('#retry-analysis').disabled,false);assert.equal(b.intervals.size,0);
+  assert.equal(b.node('#error-title').textContent,'МОЖНО ПОВТОРИТЬ');
+  assert.match(b.node('#error-description').textContent,/Пауза закончилась/);
+});
+
+test('rate limit uses readable seconds, minutes and hours without shortening the lock',async()=>{
+  for (const [delay,label] of [[59,'59 с'],[60,'1 мин'],[61,'2 мин'],[3599,'1 ч'],[3600,'1 ч'],[3601,'1 ч 1 мин'],[86399,'24 ч']]) {
+    const b=await browser();b.prepare();
+    b.setFetch(async url=>url.includes('readyz')?response({status:'ready'}):response({code:'analysis_rate_limited'},429,{'Retry-After':String(delay)}));
+    await b.run('analyze()');
+    assert.equal(b.node('#error-title').textContent,'НУЖНО ПОДОЖДАТЬ');
+    assert.equal(b.node('#retry-analysis').textContent,`Повторить через ${label}`);
+    assert.doesNotMatch(b.node('#error-description').textContent,/всего сайта|месячный|личный/);
+    b.advance(delay*1000-1);
+    const count=b.calls().length;await b.run('analyze()');
+    assert.equal(b.calls().length,count);
+    assert.equal(b.node('#retry-analysis').disabled,true);
+    b.advance(1);
+    assert.equal(b.node('#retry-analysis').disabled,false);
+    assert.equal(b.run('analysisKey'),'same-photo-key-123');
+  }
+});
+
+test('long retry delay shows local reopening date and photo retention guidance',async()=>{
+  for (const delay of [86400,2678400]) {
+    const b=await browser();b.prepare();
+    b.setFetch(async url=>url.includes('readyz')?response({status:'ready'}):response({code:'analysis_rate_limited'},429,{'Retry-After':String(delay)}));
+    await b.run('analyze()');
+    assert.equal(b.node('#retry-analysis').textContent,'Повторить позже');
+    const description=b.node('#error-description').textContent;
+    assert.match(description,/Повторить можно .*\d{2}:\d{2} по времени твоего устройства/);
+    assert.match(description,/закроешь.*фото нужно будет выбрать снова/);
+    assert.doesNotMatch(description,/Invalid Date|2678400|86400/);
+    b.advance(delay*1000);
+    assert.equal(b.node('#retry-analysis').disabled,false);
+    assert.equal(b.node('#error-title').textContent,'МОЖНО ПОВТОРИТЬ');
+  }
+});
+
+test('failed readiness describes a temporary outage without uploading the photo',async()=>{
+  const b=await browser();b.prepare();
+  b.setFetch(async()=>response({status:'unavailable'},503));
+  await b.run('analyze()');
+  assert.match(b.node('#error-description').textContent,/Сервер анализа сейчас не отвечает.*Фото не отправлено/);
+  assert.equal(b.calls().filter(([url])=>url.endsWith('/analyses')).length,0);
+  assert.equal(b.run('analysisKey'),'same-photo-key-123');
 });
 
 test('server retryability wins over status fallback for flat and nested errors',async()=>{
@@ -423,6 +468,8 @@ test('overflowing Retry-After stays blocked with a finite deadline',async()=>{
   const count=b.calls().length;await b.run('analyze()');
   assert.equal(b.calls().length,count);
   assert.equal(b.node('#retry-analysis').disabled,true);
+  assert.match(b.node('#error-description').textContent,/Сервер указал долгую паузу/);
+  assert.doesNotMatch(b.node('#error-description').textContent,/Invalid Date|NaN/);
 });
 test('selecting another uploaded photo opens file picker, not camera',async()=>{
   const b=await browser();b.prepare();b.run("lastPhotoSource='file'; chooseAgain()");

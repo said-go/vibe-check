@@ -6,6 +6,17 @@
   const PAPER = '#f5f1ea';
   const BLUE = '#3c62ff';
 
+  async function fontsReady() {
+    if (!document.fonts?.ready) return false;
+    let timer;
+    try {
+      return await Promise.race([
+        Promise.resolve(document.fonts.ready).then(() => true, () => false),
+        new Promise(resolve => { timer = setTimeout(() => resolve(false), 1500); })
+      ]);
+    } finally { clearTimeout(timer); }
+  }
+
   function wrap(ctx, value, x, y, width, lineHeight, maxLines) {
     const words = String(value || '').split(/\s+/).filter(Boolean);
     const lines = [];
@@ -37,30 +48,33 @@
   }
 
   async function create(record) {
-    if (document.fonts?.ready) await document.fonts.ready;
+    // A stalled external font must not prevent downloading a local report.
+    const loaded = await fontsReady();
+    const headingFont = loaded ? 'Unbounded, Arial, sans-serif' : 'Arial, sans-serif';
+    const bodyFont = loaded ? 'Manrope, Arial, sans-serif' : 'Arial, sans-serif';
     const canvas = document.createElement('canvas');
     canvas.width = WIDTH; canvas.height = HEIGHT;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('canvas_unavailable');
     ctx.fillStyle = PAPER; ctx.fillRect(0, 0, WIDTH, HEIGHT);
     ctx.fillStyle = ACID; ctx.fillRect(0, 0, WIDTH, 160);
-    ctx.fillStyle = INK; ctx.font = '800 72px Unbounded, Arial, sans-serif';
+    ctx.fillStyle = INK; ctx.font = `800 72px ${headingFont}`;
     ctx.fillText('ВАЙБЧЕК', 80, 108);
-    ctx.font = '800 28px Manrope, Arial, sans-serif';
+    ctx.font = `800 28px ${bodyFont}`;
     ctx.fillText(record.provisional ? 'ПРЕДВАРИТЕЛЬНЫЙ ВЕРДИКТ' : 'МОЙ ОБРАЗ СЕГОДНЯ', 80, 260);
 
     ctx.fillStyle = BLUE; ctx.fillRect(80, 310, 920, 450);
     if (record.score != null) {
       ctx.fillStyle = ACID; ctx.beginPath(); ctx.arc(830, 525, 128, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.font = '800 100px Unbounded, Arial, sans-serif';
+      ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.font = `800 100px ${headingFont}`;
       ctx.fillText(String(record.score), 830, 560);
     }
-    ctx.textAlign = 'left'; ctx.fillStyle = '#ffffff'; ctx.font = '800 42px Unbounded, Arial, sans-serif';
+    ctx.textAlign = 'left'; ctx.fillStyle = '#ffffff'; ctx.font = `800 42px ${headingFont}`;
     wrap(ctx, record.category.toUpperCase().replace(/-/g, '- '), 130, 435, 535, 60, 3);
-    ctx.font = '700 30px Manrope, Arial, sans-serif';
+    ctx.font = `700 30px ${bodyFont}`;
     wrap(ctx, record.score == null ? 'По позе и деталям в кадре' : `Оценка одежды: ${record.score}/100`, 130, 620, 520, 44, 2);
 
-    ctx.fillStyle = INK; ctx.font = '800 29px Manrope, Arial, sans-serif';
+    ctx.fillStyle = INK; ctx.font = `800 29px ${bodyFont}`;
     const metrics = [
       ['ЦЕЛЬНОСТЬ', record.metrics.coherence],
       ['ОРИГИНАЛЬНОСТЬ', record.metrics.originality],
@@ -72,19 +86,19 @@
       const x = 80 + index * 310;
       ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.strokeRect(x, 810, 290, 160);
       ctx.fillText(label, x + 20, 860, 250);
-      ctx.font = '800 65px Unbounded, Arial, sans-serif';
+      ctx.font = `800 65px ${headingFont}`;
       ctx.fillText(`${value}%`, x + 20, 940);
-      ctx.font = '800 29px Manrope, Arial, sans-serif';
+      ctx.font = `800 29px ${bodyFont}`;
     });
 
-    ctx.font = '700 31px Manrope, Arial, sans-serif';
+    ctx.font = `700 31px ${bodyFont}`;
     wrap(ctx, record.summary, 80, 1055, 900, 47, 3);
     if (record.provisional && record.score != null) {
-      ctx.font = '600 23px Manrope, Arial, sans-serif';
+      ctx.font = `600 23px ${bodyFont}`;
       ctx.fillText('По видимой части образа; детали могут изменить результат.', 80, 1210);
     }
     ctx.fillStyle = ACID; ctx.fillRect(0, 1240, WIDTH, 110);
-    ctx.fillStyle = INK; ctx.font = '800 26px Manrope, Arial, sans-serif';
+    ctx.fillStyle = INK; ctx.font = `800 26px ${bodyFont}`;
     ctx.fillText('РАЗВЛЕКАТЕЛЬНЫЙ РЕЗУЛЬТАТ · БЕЗ ФОТО', 80, 1306);
 
     return new Promise((resolve, reject) => {

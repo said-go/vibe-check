@@ -173,3 +173,4 @@ Assert-Throws { Invoke-BoundedCommand $shell @('-NoProfile','-Command','exit 7')
 $global:deployTestCount++
 Assert-Throws { Invoke-BoundedCommand $shell @('-NoProfile','-Command','Start-Sleep -Seconds 15') 1 } 'deadline'
 Write-Host "Deployment regression checks passed: $global:deployTestCount. No cloud calls or photo uploads."
+& (Join-Path $PSScriptRoot 'test-rollback.ps1')
